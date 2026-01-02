@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package jiaa.score;
+
+// ScoreService - Dev 3(Electron)에게 실시간 점수 스트림 제공
+service ScoreService {
+  // 실시간 점수 스트림 (Dev 3에게 0.1초마다 전송)
+  rpc SubscribeScore (ScoreRequest) returns (stream ScoreUpdate);
+}
+
+message ScoreRequest {
+  string client_id = 1;
+}
+
+message ScoreUpdate {
+  int32 current_score = 1;    // 0-100
+  ScoreState state = 2;
+  string feedback_msg = 3;    // 피드백 메시지
+  int64 timestamp = 4;        // Unix milliseconds
+}
+
+enum ScoreState {
+  NORMAL = 0;
+  FOCUSING = 1;     // Score > 80 - 집중 중 (건드리지 마)
+  DISTRACTED = 2;   // Score < 30 - 분산됨
+  SLEEPING = 3;     // Score < 30 + eyes closed - 잠듦
+  AFK = 4;          // 자리 비움
+  EMERGENCY = 5;    // Audio > 90dB - 응급 상황
+}

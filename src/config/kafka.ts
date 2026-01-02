@@ -10,10 +10,12 @@ const kafka = new Kafka({
 });
 
 const consumer = kafka.consumer({ groupId: 'jiaa-data-group' });
+const producer = kafka.producer();
 
 export const connectKafka = async () => {
   await consumer.connect();
-  console.log('Kafka Consumer connected');
+  await producer.connect();
+  console.log('Kafka Consumer & Producer connected');
 };
 
-export { consumer };
+export { consumer, producer };
