@@ -4,13 +4,14 @@ import { StateDecisionMaker, UserState } from '../core/state-decision';
 import { eventBus, EVENTS } from '../core/event-bus';
 import { writeApi, Point } from '../config/influx';
 
-const TOPIC = 'sensor-data';
+const TOPIC = process.env.ACTIVITY_TOPIC || 'client-activity';
 const STATE_TOPIC = 'command-state'; // Dev 4가 수신하는 토픽
 
 // 이전 상태 추적 (상태 변경 시에만 전송)
 let previousState: UserState | null = null;
 
 export const startIngestion = async () => {
+    console.log(`[Ingestion] Subscribing to topic: ${TOPIC}`);
     await consumer.subscribe({ topic: TOPIC, fromBeginning: false });
 
     await consumer.run({
@@ -19,7 +20,35 @@ export const startIngestion = async () => {
 
             try {
                 const payloadString = message.value.toString();
-                const data: SystemLogRequest = JSON.parse(payloadString);
+                const rawData = JSON.parse(payloadString);
+
+                // Map ClientActivity (Go) to SystemLogRequest (TS)
+                // Go JSON tags: client_id, activity_type, timestamp, metadata
+                const data: SystemLogRequest = {
+                    user_id: rawData.client_id || rawData.user_id || rawData.ClientID,
+                    timestamp: new Date(rawData.timestamp || rawData.Timestamp).getTime(),
+                    is_os_idle: false,
+                    is_eyes_closed: false,
+                    vision_score: 0,
+                    is_emergency: false,
+                    mouse_distance: 0,
+                    keystroke_count: 0,
+                    click_count: 0
+                };
+
+                // Extract Metadata if available (try strict lowercase first, then Fallback)
+                const meta = rawData.metadata || rawData.Metadata;
+                if (meta) {
+                    if (meta.mouse_distance) data.mouse_distance = parseInt(meta.mouse_distance);
+                    if (meta.keystroke_count) data.keystroke_count = parseInt(meta.keystroke_count);
+                    if (meta.click_count) data.click_count = parseInt(meta.click_count);
+                }
+
+                // If explicit fields exist (legacy/fallback)
+                if (rawData.mouse_distance) data.mouse_distance = rawData.mouse_distance;
+                if (rawData.keystroke_count) data.keystroke_count = rawData.keystroke_count;
+
+                console.log(`[Ingestion] Received Activity: Keys=${data.keystroke_count}, Mouse=${data.mouse_distance}, Clicks=${data.click_count}`);
 
                 // 1. Calculate
                 const score = ScoringEngine.calculateScore(data);
@@ -50,6 +79,7 @@ export const startIngestion = async () => {
                     .stringField('state', UserState[state])
                     .intField('mouse_distance', data.mouse_distance)
                     .intField('keystroke_count', data.keystroke_count)
+                    .intField('click_count', data.click_count)
                     .timestamp(new Date(data.timestamp || Date.now()));
 
                 writeApi.writePoint(point);
