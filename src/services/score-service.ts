@@ -3,15 +3,15 @@ import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import { eventBus, EVENTS } from '../core/event-bus';
 
-const PROTO_PATH = path.resolve(__dirname, '../../../common/score.proto');
+// Proto 파일 경로 수정 - 로컬 protos 폴더 사용
+const PROTO_PATH = path.resolve(__dirname, '../../protos/score.proto');
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
     keepCase: true,
     longs: String,
     enums: String,
     defaults: true,
-    oneofs: true,
-    includeDirs: [path.resolve(__dirname, '../../../common')] // Put common dir in include path
+    oneofs: true
 });
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;
