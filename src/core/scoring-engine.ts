@@ -5,6 +5,7 @@ export interface SystemLogRequest {
     timestamp: number;
     mouse_distance: number;
     keystroke_count: number;
+    click_count: number;
     is_os_idle: boolean;
     is_eyes_closed: boolean;
     vision_score: number;
