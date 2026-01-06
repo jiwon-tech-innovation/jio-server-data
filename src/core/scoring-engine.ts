@@ -10,6 +10,10 @@ export interface SystemLogRequest {
     is_eyes_closed: boolean;
     vision_score: number;
     is_emergency: boolean;
+    keyboard_entropy?: number;
+    window_title?: string;
+    is_dragging?: boolean;
+    avg_dwell_time?: number;
 }
 
 export class ScoringEngine {

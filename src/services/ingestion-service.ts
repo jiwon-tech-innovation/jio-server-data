@@ -42,6 +42,10 @@ export const startIngestion = async () => {
                     if (meta.mouse_distance) data.mouse_distance = parseInt(meta.mouse_distance);
                     if (meta.keystroke_count) data.keystroke_count = parseInt(meta.keystroke_count);
                     if (meta.click_count) data.click_count = parseInt(meta.click_count);
+                    if (meta.entropy) data.keyboard_entropy = parseFloat(meta.entropy);
+                    if (meta.window_title) data.window_title = meta.window_title;
+                    if (meta.is_dragging) data.is_dragging = (meta.is_dragging === 'true');
+                    if (meta.avg_dwell_time) data.avg_dwell_time = parseFloat(meta.avg_dwell_time);
                 }
 
                 // If explicit fields exist (legacy/fallback)
@@ -54,7 +58,12 @@ export const startIngestion = async () => {
                 const score = ScoringEngine.calculateScore(data);
                 const state = StateDecisionMaker.determineState(score, data);
 
-                console.log(`[Ingestion] Score: ${score}, State: ${UserState[state]}`);
+                const stateStr = UserState[state];
+                if (state === UserState.GAMING) {
+                    console.log(`\x1b[31m[Ingestion] 🚨 GAMING DETECTED! Score: ${score}, State: ${stateStr}\x1b[0m`);
+                } else {
+                    console.log(`[Ingestion] Score: ${score}, State: ${stateStr}`);
+                }
 
                 // 2. Broadcast internal event (for gRPC stream to Dev 3)
                 const updatePayload = {
@@ -130,6 +139,7 @@ function userStateToCommandState(state: UserState): string {
         case UserState.DISTRACTED: return 'DISTRACTED';  // Score < 30
         case UserState.EMERGENCY: return 'EMERGENCY';    // Audio > 90dB
         case UserState.AFK: return 'DISTRACTED';
+        case UserState.GAMING: return 'DISTRACTED';      // Treat Gaming as Distraction
         default: return 'AWAKE';
     }
 }
@@ -143,6 +153,7 @@ function getPriority(state: UserState): number {
         case UserState.SLEEPING: return 8;
         case UserState.DISTRACTED: return 6;
         case UserState.FOCUSING: return 3;     // 낮은 우선순위 (건드리지 마)
+        case UserState.GAMING: return 9;       // Very High Priority (Stop Gaming!)
         default: return 5;
     }
 }
@@ -153,6 +164,7 @@ function getFeedbackMsg(state: UserState): string {
         case UserState.SLEEPING: return "Wake Up!";
         case UserState.DISTRACTED: return "Stay Focused!";
         case UserState.EMERGENCY: return "Emergency Detected!";
+        case UserState.GAMING: return "Stop Gaming! Back to Work!";
         default: return "Keep Going!";
     }
 }

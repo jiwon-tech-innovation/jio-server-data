@@ -9,6 +9,9 @@ const org = process.env.INFLUX_ORG || 'jiaa';
 const bucket = process.env.INFLUX_BUCKET || 'sensor_data';
 
 const influxDB = new InfluxDB({ url, token });
-const writeApi = influxDB.getWriteApi(org, bucket, 'ns'); // 'ns' precision for high freq data if needed, or 'ms'
+const writeApi = influxDB.getWriteApi(org, bucket, 'ns', {
+    flushInterval: 1000,
+    batchSize: 1
+});
 
 export { writeApi, Point, influxDB };
