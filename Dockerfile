@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Set environment variables
 # NODE_ENV: production optimize
-ENV NODE_ENV=production
+# ENV NODE_ENV=production (Moved to after build)
 
 # Install system dependencies (Alpine specific if needed for gRPC/native modules)
 # grpc-js implies pure JS but some deps might need python/make/g++
@@ -26,6 +26,9 @@ RUN npm run build
 
 # Prune dev dependencies to keep image small
 RUN npm prune --production
+
+# Set NODE_ENV to production for runtime
+ENV NODE_ENV=production
 
 # Expose port (gRPC)
 EXPOSE 9090

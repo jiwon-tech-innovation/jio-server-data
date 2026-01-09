@@ -5,7 +5,7 @@ dotenv.config();
 
 const kafka = new Kafka({
   clientId: 'jiaa-data-service',
-  brokers: [(process.env.KAFKA_BROKER || 'localhost:9092')],
+  brokers: [(process.env.KAFKA_BROKER || process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092')],
   logLevel: logLevel.INFO
 });
 
