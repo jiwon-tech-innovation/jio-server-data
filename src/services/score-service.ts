@@ -4,7 +4,8 @@ import path from 'path';
 import { eventBus, EVENTS } from '../core/event-bus';
 
 // Corrected path: common/proto/score.proto
-const PROTO_PATH = path.resolve(__dirname, '../../../common/proto/score.proto');
+// Corrected path: point to local 'protos' directory copied into container
+const PROTO_PATH = path.resolve(__dirname, '../../protos/score.proto');
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
     keepCase: true,
@@ -12,7 +13,7 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
     enums: String,
     defaults: true,
     oneofs: true,
-    includeDirs: [path.resolve(__dirname, '../../../common/proto')] // Changed to common/proto
+    includeDirs: [path.resolve(__dirname, '../../protos')]
 });
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;

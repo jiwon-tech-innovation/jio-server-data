@@ -1,0 +1,18 @@
+# Version Control
+.git
+.gitignore
+
+# Dependencies
+node_modules
+
+# Build Artifacts
+dist
+build
+
+# IDE
+.idea
+.vscode
+
+# Logs
+npm-debug.log
+yarn-error.log
