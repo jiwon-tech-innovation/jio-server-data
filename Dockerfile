@@ -23,6 +23,8 @@ COPY . .
 
 # Build TypeScript to dist/
 RUN npm run build
+# Copy static assets (Admin Dashboard)
+COPY src/public ./dist/public
 
 # Prune dev dependencies to keep image small
 RUN npm prune --production

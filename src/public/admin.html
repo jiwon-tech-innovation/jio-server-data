@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JIAA Blacklist Admin</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f4f4f4;
+        }
+
+        .PENDING {
+            color: orange;
+            font-weight: bold;
+        }
+
+        .APPROVED {
+            color: green;
+        }
+
+        .REJECTED {
+            color: red;
+            text-decoration: line-through;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 5px 10px;
+            margin-right: 5px;
+        }
+
+        .btn-approve {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+        }
+
+        .btn-reject {
+            background-color: #f44336;
+            color: white;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🛡️ JIAA Admin Dashboard</h1>
+    <div id="stats">Loading...</div>
+
+    <h2>🚨 Blacklist Review (Pending Games)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>App Name</th>
+                <th>Status</th>
+                <th>Reports</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="list-body"></tbody>
+    </table>
+
+    <h2>✅ Whitelist Management (Safe Apps)</h2>
+    <div style="margin: 10px 0;">
+        <input type="text" id="whitelist-input" placeholder="Enter app name (e.g. VSCode)" />
+        <button class="btn-approve" onclick="addToWhitelist()">Add Safe App</button>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>App Name</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="whitelist-body"></tbody>
+    </table>
+
+    <script>
+        const API_URL = 'http://localhost:8082/api/v1';
+
+        async function init() {
+            await fetchBlacklist();
+            await fetchWhitelist();
+        }
+
+        async function fetchBlacklist() {
+            const res = await fetch(`${API_URL}/blacklist/all`);
+            const json = await res.json();
+            renderBlacklist(json.data);
+        }
+
+        async function fetchWhitelist() {
+            const res = await fetch(`${API_URL}/whitelist`);
+            const json = await res.json();
+            renderWhitelist(json.data);
+        }
+
+        function renderBlacklist(items) {
+            const tbody = document.getElementById('list-body');
+            tbody.innerHTML = '';
+
+            items.sort((a, b) => {
+                if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
+                if (a.status !== 'PENDING' && b.status === 'PENDING') return 1;
+                return b.reportCount - a.reportCount;
+            });
+
+            const pendingCount = items.filter(i => i.status === 'PENDING').length;
+            document.getElementById('stats').innerText = `Pending Reviews: ${pendingCount} | Total Tracked: ${items.length}`;
+
+            items.forEach(item => {
+                // Hide Whitelisted items from this list to reduce clutter
+                if (item.status === 'WHITELISTED') return;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.appName}</td>
+                    <td class="${item.status}">${item.status}</td>
+                    <td>${item.reportCount}</td>
+                    <td>
+                        ${item.status === 'PENDING' ? `
+                            <button class="btn-approve" onclick="review('${item.appName}', 'APPROVED')">Block</button>
+                            <button class="btn-reject" onclick="review('${item.appName}', 'REJECTED')">Ignore</button>
+                            <button class="btn-approve" style="background-color:#2196F3" onclick="review('${item.appName}', 'WHITELISTED')">Whitelist</button>
+                        ` : item.status}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderWhitelist(items) {
+            const tbody = document.getElementById('whitelist-body');
+            tbody.innerHTML = '';
+
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.appName}</td>
+                    <td class="APPROVED" style="color:#2196F3">SAFE</td>
+                    <td>
+                        <button class="btn-reject" onclick="review('${item.appName}', 'REJECTED')">Remove</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function review(appName, status) {
+            if (!confirm(`Mark '${appName}' as ${status}?`)) return;
+
+            await fetch(`${API_URL}/blacklist/review`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appName, status })
+            });
+            init();
+        }
+
+        async function addToWhitelist() {
+            const input = document.getElementById('whitelist-input');
+            const appName = input.value.trim();
+            if (!appName) return;
+
+            await fetch(`${API_URL}/whitelist/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appName })
+            });
+            input.value = '';
+            init();
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

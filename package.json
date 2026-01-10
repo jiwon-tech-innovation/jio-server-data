@@ -31,7 +31,12 @@
     "@grpc/proto-loader": "^0.8.0",
     "@influxdata/influxdb-client": "^1.35.0",
     "@influxdata/influxdb-client-apis": "^1.35.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "kafkajs": "^2.2.4"
   }
 }
