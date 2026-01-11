@@ -13,7 +13,7 @@ export enum UserState {
 }
 
 export class StateDecisionMaker {
-    public static determineState(score: number, data: SystemLogRequest): UserState {
+    public static async determineState(score: number, data: SystemLogRequest): Promise<UserState> {
         if (data.is_emergency) {
             return UserState.EMERGENCY;
         }
@@ -46,7 +46,7 @@ export class StateDecisionMaker {
         // D. Entropy Based (Adaptive Threshold)
         // Check User Profile
         const profileManager = UserProfileManager.getInstance();
-        const userProfile = profileManager.getProfile(data.user_id || "default");
+        const userProfile = await profileManager.getProfile(data.user_id || "default");
         const dynamicThreshold = userProfile.getPersonalizedGameThreshold();
 
         if (data.keyboard_entropy !== undefined && totalActivity > 10) {
@@ -99,7 +99,7 @@ export class StateDecisionMaker {
         // This prevents learning "Undetected Gaming" as "Normal".
         if (data.keyboard_entropy !== undefined && totalActivity > 10 && data.keyboard_entropy > 3.0) {
             userProfile.adaptThreshold(data.keyboard_entropy);
-            profileManager.save();
+            await profileManager.saveProfile(data.user_id || "default");
         }
 
         if (score >= 80) {
