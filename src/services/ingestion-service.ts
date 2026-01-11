@@ -56,7 +56,7 @@ export const startIngestion = async () => {
 
                 // 1. Calculate
                 const score = ScoringEngine.calculateScore(data);
-                const state = StateDecisionMaker.determineState(score, data);
+                const state = await StateDecisionMaker.determineState(score, data);
 
                 const stateStr = UserState[state];
                 if (state === UserState.GAMING) {
@@ -81,15 +81,37 @@ export const startIngestion = async () => {
                     previousState = state;
                 }
 
-                // 4. Persist to InfluxDB
-                const point = new Point('system_log')
+                // 4. Persist to InfluxDB CHECKED
+                // Schema Update for TIL: Use 'user_activity' and add 'category', 'action_detail'
+
+                // Derive Category
+                let category = "NEUTRAL";
+                if (state === UserState.FOCUSING) category = "STUDY";
+                else if (state === UserState.GAMING) category = "PLAY";
+                else if (state === UserState.DISTRACTED) category = "PLAY"; // Distracted is basically playing/slacking
+                else if (state === UserState.SLEEPING) category = "SLEEP";
+
+                const point = new Point('user_activity') // Changed from 'system_log'
                     .tag('user_id', data.user_id)
+                    .tag('category', category) // Added Tag
                     .floatField('score', score)
                     .stringField('state', UserState[state])
                     .intField('mouse_distance', data.mouse_distance)
                     .intField('keystroke_count', data.keystroke_count)
-                    .intField('click_count', data.click_count)
-                    .timestamp(new Date(data.timestamp || Date.now()));
+                    .intField('click_count', data.click_count);
+
+                if (data.window_title) {
+                    point.stringField('action_detail', data.window_title); // Added Field
+                } else {
+                    // Fallback to state if no window title
+                    point.stringField('action_detail', UserState[state]);
+                }
+
+                if (data.keyboard_entropy !== undefined) {
+                    point.floatField('entropy', data.keyboard_entropy);
+                }
+
+                point.timestamp(new Date(data.timestamp || Date.now()));
 
                 writeApi.writePoint(point);
 
