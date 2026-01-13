@@ -5,6 +5,7 @@ import bodyParser from 'body-parser';
 import { BlacklistManager } from './core/blacklist-manager';
 import { startGrpcServer } from './services/score-service';
 import { startIngestion } from './services/ingestion-service';
+import { startExpressServer } from './services/statistics-service';
 import { connectKafka } from './config/kafka';
 
 const main = async () => {
@@ -89,8 +90,12 @@ const main = async () => {
     // 3. Start Ingestion Loop
     await startIngestion();
 
-    // 4. Start gRPC Server
+    // 4. Start gRPC Server (for score streaming)
     startGrpcServer();
+
+    // 5. Start Express Server (for Statistics REST API)
+    const statsPort = parseInt(process.env.STATS_PORT || '3001');
+    startExpressServer(statsPort);
 };
 
 main().catch(console.error);
