@@ -26,14 +26,19 @@ RUN npm run build
 # Copy static assets (Admin Dashboard)
 COPY src/public ./dist/public
 
+# Set environment variables
+# NODE_ENV: production optimize
+ENV NODE_ENV=production
+
 # Prune dev dependencies to keep image small
 RUN npm prune --production
 
 # Set NODE_ENV to production for runtime
 ENV NODE_ENV=production
 
-# Expose port (gRPC)
+# Expose ports (gRPC + Statistics API)
 EXPOSE 9090
+EXPOSE 3001
 
 # Command to run the application
 CMD ["npm", "start"]
