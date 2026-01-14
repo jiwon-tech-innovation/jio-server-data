@@ -1,5 +1,4 @@
 import express, { Request, Response, Router } from 'express';
-import cors from 'cors';
 import { influxDB } from '../config/influx';
 import { QueryApi } from '@influxdata/influxdb-client';
 
@@ -368,12 +367,6 @@ export function createStatisticsRouter(): Router {
  */
 export function startExpressServer(port: number = 3001): void {
     const app = express();
-
-    // CORS 설정
-    app.use(cors({
-        origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
-        credentials: true
-    }));
 
     app.use(express.json());
 

@@ -1,6 +1,5 @@
 import path from 'path';
 import express from 'express';
-import cors from 'cors';
 import bodyParser from 'body-parser';
 import { BlacklistManager } from './core/blacklist-manager';
 import { startGrpcServer } from './services/score-service';
@@ -18,7 +17,6 @@ const main = async () => {
     const app = express();
     const port = 8082; // Data Service HTTP Port
 
-    app.use(cors());
     app.use(bodyParser.json());
     // Serve "src/public" as static files (access via /admin.html)
     app.use(express.static(path.join(__dirname, 'public')));
