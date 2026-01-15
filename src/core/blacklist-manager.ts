@@ -96,4 +96,14 @@ export class BlacklistManager {
         }
         return false;
     }
+
+    public deleteApp(appName: string): boolean {
+        if (this.blacklist.has(appName)) {
+            this.blacklist.delete(appName);
+            this.save();
+            console.log(`[Blacklist] Deleted '${appName}'`);
+            return true;
+        }
+        return false;
+    }
 }
