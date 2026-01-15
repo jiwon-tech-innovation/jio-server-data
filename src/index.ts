@@ -16,7 +16,7 @@ const main = async () => {
 
     // 1. HTTP Server (Express)
     const app = express();
-    const port = 8082; // Data Service HTTP Port
+    const port = 8083; // Data Service HTTP Port (8082 is taken by Auth Service)
 
     app.use(cors());
     app.use(bodyParser.json());
@@ -65,6 +65,27 @@ const main = async () => {
         res.json({ success });
     });
 
+    // API: Delete Item (Admin) [NEW]
+    app.delete('/api/v1/blacklist/remove', (req, res) => {
+        const { appName } = req.body;
+        const success = blacklistManager.deleteApp(appName);
+        res.json({ success });
+    });
+
+    // API: Add Blacklist (Admin - Manual)
+    app.post('/api/v1/blacklist/add', (req, res) => {
+        const { appName } = req.body;
+        if (!appName) {
+            res.status(400).json({ success: false, message: "Missing appName" });
+            return;
+        }
+        // 1. Report as game (force creation)
+        blacklistManager.reportApp(appName, true);
+        // 2. Immediately approve
+        const success = blacklistManager.reviewApp(appName, 'APPROVED');
+        res.json({ success });
+    });
+
     // API: Add Whitelist (Admin)
     app.post('/api/v1/whitelist/add', (req, res) => {
         const { appName } = req.body;
@@ -77,6 +98,22 @@ const main = async () => {
         // Force status
         const success = blacklistManager.reviewApp(appName, 'WHITELISTED');
         res.json({ success });
+    });
+
+    // --- Monitor API (In-Memory) ---
+    let latestClientApps: string[] = [];
+
+    app.post('/api/v1/monitor/apps', (req, res) => {
+        const { apps } = req.body;
+        if (Array.isArray(apps)) {
+            // Filter out empty strings or duplicates if needed
+            latestClientApps = apps;
+        }
+        res.json({ success: true });
+    });
+
+    app.get('/api/v1/monitor/apps', (req, res) => {
+        res.json({ success: true, data: latestClientApps });
     });
 
     app.listen(port, () => {
