@@ -362,6 +362,8 @@ export function createStatisticsRouter(): Router {
     return router;
 }
 
+import cors from 'cors';
+
 /**
  * Express 서버 시작
  */
@@ -369,6 +371,7 @@ export function startExpressServer(port: number = 3001): void {
     const app = express();
 
     app.use(express.json());
+    app.use(cors()); // Enable CORS for Client Access
 
     // 헬스체크
     app.get('/health', (_req, res) => {

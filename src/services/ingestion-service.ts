@@ -46,6 +46,11 @@ export const startIngestion = async () => {
                     if (meta.window_title) data.window_title = meta.window_title;
                     if (meta.is_dragging) data.is_dragging = (meta.is_dragging === 'true');
                     if (meta.avg_dwell_time) data.avg_dwell_time = parseFloat(meta.avg_dwell_time);
+
+                    // [FIX] Telemetry Pipeline
+                    if (meta.is_os_idle) data.is_os_idle = (meta.is_os_idle === 'true');
+                    if (meta.is_eyes_closed) data.is_eyes_closed = (meta.is_eyes_closed === 'true');
+                    if (meta.concentration_score) data.vision_score = parseFloat(meta.concentration_score);
                 }
 
                 // If explicit fields exist (legacy/fallback)
