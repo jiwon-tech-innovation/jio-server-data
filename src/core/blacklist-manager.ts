@@ -10,14 +10,22 @@ export interface BlacklistItem {
 }
 
 export class BlacklistManager {
+    private static instance: BlacklistManager;
     private filePath: string;
     private blacklist: Map<string, BlacklistItem>;
 
-    constructor() {
+    private constructor() {
         // Data stored in 'jiaa-server-data/data/blacklist.json'
         this.filePath = path.join(process.cwd(), 'data', 'blacklist.json');
         this.blacklist = new Map();
         this.load();
+    }
+
+    public static getInstance(): BlacklistManager {
+        if (!BlacklistManager.instance) {
+            BlacklistManager.instance = new BlacklistManager();
+        }
+        return BlacklistManager.instance;
     }
 
     private load() {

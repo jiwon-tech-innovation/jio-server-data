@@ -12,7 +12,7 @@ const main = async () => {
     console.log('Starting Data Service (Node.js)...');
 
     // 0. Initialize Blacklist Manager
-    const blacklistManager = new BlacklistManager();
+    const blacklistManager = BlacklistManager.getInstance();
 
     // 1. HTTP Server (Express)
     const app = express();
