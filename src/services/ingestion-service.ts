@@ -3,12 +3,42 @@ import { ScoringEngine, SystemLogRequest } from '../core/scoring-engine';
 import { StateDecisionMaker, UserState } from '../core/state-decision';
 import { eventBus, EVENTS } from '../core/event-bus';
 import { writeApi, Point } from '../config/influx';
+import { BlacklistManager } from '../core/blacklist-manager';
 
 const TOPIC = process.env.ACTIVITY_TOPIC || 'client-activity';
 const STATE_TOPIC = 'command-state'; // Dev 4가 수신하는 토픽
 
 // 이전 상태 추적 (상태 변경 시에만 전송)
 let previousState: UserState | null = null;
+
+
+// [Wall 3] AI Verification Helper
+async function classifyContent(windowTitle: string): Promise<{ state: string, reason: string }> {
+    try {
+        const response = await fetch('http://localhost:8000/api/v1/classify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content_type: 'WINDOW',
+                process_info: {
+                    process_name: 'unknown', // not critical for logic
+                    window_title: windowTitle
+                }
+            })
+        });
+
+        if (!response.ok) {
+            console.error(`[AI] Classification failed: ${response.status}`);
+            return { state: 'PLAY', reason: 'AI_ERROR' }; // Fail-safe: Assume worst? Or assume innocent? Let's assume PLAY to match original logic if AI fails? actually maybe safer to stick to original heuristic.
+        }
+
+        const json = await response.json();
+        return { state: json.state, reason: json.reason };
+    } catch (e) {
+        console.error(`[AI] Error calling AI service:`, e);
+        return { state: 'PLAY', reason: 'NETWORK_ERROR' };
+    }
+}
 
 export const startIngestion = async () => {
     console.log(`[Ingestion] Subscribing to topic: ${TOPIC}`);
@@ -56,12 +86,39 @@ export const startIngestion = async () => {
 
                 // 1. Calculate
                 const score = ScoringEngine.calculateScore(data);
-                const state = await StateDecisionMaker.determineState(score, data);
+                let state = await StateDecisionMaker.determineState(score, data);
 
-                const stateStr = UserState[state];
+                // [Wall 3] AI Verification Loop
                 if (state === UserState.GAMING) {
-                    console.log(`\x1b[31m[Ingestion] 🚨 GAMING DETECTED! Score: ${score}, State: ${stateStr}\x1b[0m`);
+                    let aiConfirmed = true;
+
+                    // Only verify if we have a title (otherwise we rely on heuristic)
+                    if (data.window_title && data.window_title !== "Unknown") {
+                        console.log(`[Wall 3] Heuristic says GAMING. Verifying with AI for title: '${data.window_title}'...`);
+                        const aiResult = await classifyContent(data.window_title);
+                        console.log(`[Wall 3] AI Result: ${aiResult.state} (${aiResult.reason})`);
+
+                        if (aiResult.state === 'STUDY') {
+                            console.log(`\x1b[32m[Wall 3] 🛡️ AI OVERRIDE: Gaming -> Normal (Context: ${aiResult.reason})\x1b[0m`);
+                            state = UserState.NORMAL; // Override state
+                            aiConfirmed = false;
+                        } else {
+                            console.log(`[Wall 3] AI Confirmed Gaming.`);
+                        }
+                    }
+
+                    if (aiConfirmed) {
+                        const stateStr = UserState[state];
+                        console.log(`\x1b[31m[Ingestion] 🚨 CONFIRMED GAMING! Score: ${score}, State: ${stateStr}\x1b[0m`);
+
+                        // [Feedback Loop] Auto-Report to Blacklist
+                        if (data.window_title && data.window_title !== "Unknown") {
+                            console.log(`[Feedback] Auto-reporting '${data.window_title}' to Blacklist...`);
+                            BlacklistManager.getInstance().reportApp(data.window_title, true);
+                        }
+                    }
                 } else {
+                    const stateStr = UserState[state];
                     console.log(`[Ingestion] Score: ${score}, State: ${stateStr}`);
                 }
 

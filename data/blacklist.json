@@ -14,38 +14,17 @@
     "lastReportedAt": 1768459872918
   },
   {
-    "appName": "/Users/Shared/Riot Games/Riot Client.app",
-    "isGame": true,
-    "status": "APPROVED",
-    "reportCount": 1,
-    "lastReportedAt": 1768476054082
-  },
-  {
-    "appName": "/Users/Shared/Riot Games/Riot Client.app/Contents/Frameworks/Riot Client.app",
-    "isGame": true,
-    "status": "APPROVED",
-    "reportCount": 1,
-    "lastReportedAt": 1768476055485
-  },
-  {
-    "appName": "/Users/Shared/Riot Games/Riot Client.app/Contents/Frameworks/Riot Client.app/Contents/MacOS/Riot Client",
-    "isGame": true,
-    "status": "APPROVED",
-    "reportCount": 1,
-    "lastReportedAt": 1768476056998
-  },
-  {
-    "appName": "/Users/Shared/Riot Games/Riot Client.app/Contents/MacOS/RiotClientServices",
-    "isGame": true,
-    "status": "APPROVED",
-    "reportCount": 1,
-    "lastReportedAt": 1768476059184
-  },
-  {
     "appName": "Steam",
     "isGame": true,
     "status": "APPROVED",
     "reportCount": 1,
     "lastReportedAt": 1768482844619
+  },
+  {
+    "appName": "Minecraft",
+    "isGame": true,
+    "status": "APPROVED",
+    "reportCount": 1,
+    "lastReportedAt": 1768738048369
   }
 ]
