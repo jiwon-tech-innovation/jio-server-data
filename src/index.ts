@@ -129,18 +129,35 @@ const main = async () => {
         console.log(`[Admin] Dashboard available at http://localhost:${port}/admin.html`);
     });
 
-    // 2. Connect Kafka
-    await connectKafka();
+    // 2. Connect Kafka (non-blocking - continue even if Kafka fails)
+    try {
+        await connectKafka();
+    } catch (err) {
+        console.warn('[Main] Kafka connection failed, continuing without Kafka:', err);
+    }
 
-    // 3. Start Ingestion Loop
-    await startIngestion();
+    // 3. Start Ingestion Loop (non-blocking - continue even if ingestion fails)
+    try {
+        await startIngestion();
+    } catch (err) {
+        console.warn('[Main] Ingestion service failed, continuing without ingestion:', err);
+    }
 
     // 4. Start gRPC Server (for score streaming)
-    startGrpcServer();
+    try {
+        startGrpcServer();
+    } catch (err) {
+        console.warn('[Main] gRPC server failed, continuing without gRPC:', err);
+    }
 
-    // 5. Start Express Server (for Statistics REST API)
-    const statsPort = parseInt(process.env.STATS_PORT || '3001');
-    startExpressServer(statsPort);
+    // 5. Start Express Server (for Statistics REST API) - Critical, must not fail
+    try {
+        const statsPort = parseInt(process.env.STATS_PORT || '3001');
+        startExpressServer(statsPort);
+    } catch (err) {
+        console.error('[Main] CRITICAL: Statistics server failed to start:', err);
+        throw err; // Re-throw to ensure process exits if stats server fails
+    }
 };
 
 main().catch(console.error);
