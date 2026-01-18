@@ -6,6 +6,7 @@ import { startGrpcServer } from './services/score-service';
 import { startIngestion } from './services/ingestion-service';
 import { startExpressServer } from './services/statistics-service';
 import { connectKafka } from './config/kafka';
+import { writeApi, Point } from './config/influx';
 
 const main = async () => {
     console.log('Starting Data Service (Node.js)...');
@@ -78,6 +79,49 @@ const main = async () => {
         // Force status
         const success = blacklistManager.reviewApp(appName, 'WHITELISTED');
         res.json({ success });
+    });
+
+    // API: Generic Log Ingestion (Data Trinity)
+    // Writes to InfluxDB 'user_activity' measurement
+    app.post('/api/v1/log', async (req, res) => {
+        try {
+            const { user_id, category, type, data, timestamp } = req.body;
+
+            if (!user_id || !category || !data) {
+                res.status(400).json({ success: false, message: "Missing required fields" });
+                return;
+            }
+
+            console.log(`[Log] Received ${category}/${type} log for ${user_id}`);
+
+            const point = new Point('user_activity')
+                .tag('user_id', user_id)
+                .tag('category', category)
+                .tag('type', type || 'general')
+                .timestamp(new Date(timestamp || Date.now()));
+
+            // Handle Data Fields
+            if (data.score !== undefined) point.floatField('score', parseFloat(data.score));
+            if (data.wrong_count !== undefined) point.intField('wrong_count', parseInt(data.wrong_count));
+            if (data.action_detail) point.stringField('action_detail', data.action_detail);
+
+            // Allow generic fields
+            if (data.duration_min !== undefined) point.floatField('duration_min', parseFloat(data.duration_min));
+
+            // Store complex objects as JSON string (e.g., wrong_answers)
+            if (data.wrong_answers) {
+                point.stringField('wrong_answers', JSON.stringify(data.wrong_answers));
+            }
+
+            writeApi.writePoint(point);
+            await writeApi.flush(); // Ensure immediate write for tests
+
+            res.json({ success: true, message: "Log saved to InfluxDB" });
+
+        } catch (e: any) {
+            console.error("[API] Log Ingestion Error:", e);
+            res.status(500).json({ success: false, message: e.message });
+        }
     });
 
     app.listen(port, () => {
