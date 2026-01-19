@@ -3,10 +3,7 @@ import { ScoringEngine, SystemLogRequest } from '../core/scoring-engine';
 import { StateDecisionMaker, UserState } from '../core/state-decision';
 import { eventBus, EVENTS } from '../core/event-bus';
 import { writeApi, Point } from '../config/influx';
-<<<<<<< HEAD
-=======
 import { BlacklistManager } from '../core/blacklist-manager';
->>>>>>> origin/mvp/v5.0.0
 
 const TOPIC = process.env.ACTIVITY_TOPIC || 'client-activity';
 const STATE_TOPIC = 'command-state'; // Dev 4가 수신하는 토픽
@@ -14,8 +11,6 @@ const STATE_TOPIC = 'command-state'; // Dev 4가 수신하는 토픽
 // 이전 상태 추적 (상태 변경 시에만 전송)
 let previousState: UserState | null = null;
 
-<<<<<<< HEAD
-=======
 
 // [Wall 3] AI Verification Helper
 import * as grpc from '@grpc/grpc-js';
@@ -74,7 +69,6 @@ async function classifyContent(windowTitle: string): Promise<{ state: string, re
     });
 }
 
->>>>>>> origin/mvp/v5.0.0
 export const startIngestion = async () => {
     console.log(`[Ingestion] Subscribing to topic: ${TOPIC}`);
     await consumer.subscribe({ topic: TOPIC, fromBeginning: false });
@@ -111,14 +105,6 @@ export const startIngestion = async () => {
                     if (meta.window_title) data.window_title = meta.window_title;
                     if (meta.is_dragging) data.is_dragging = (meta.is_dragging === 'true');
                     if (meta.avg_dwell_time) data.avg_dwell_time = parseFloat(meta.avg_dwell_time);
-<<<<<<< HEAD
-
-                    // [FIX] Telemetry Pipeline
-                    if (meta.is_os_idle) data.is_os_idle = (meta.is_os_idle === 'true');
-                    if (meta.is_eyes_closed) data.is_eyes_closed = (meta.is_eyes_closed === 'true');
-                    if (meta.concentration_score) data.vision_score = parseFloat(meta.concentration_score);
-=======
->>>>>>> origin/mvp/v5.0.0
                 }
 
                 // If explicit fields exist (legacy/fallback)
@@ -129,14 +115,6 @@ export const startIngestion = async () => {
 
                 // 1. Calculate
                 const score = ScoringEngine.calculateScore(data);
-<<<<<<< HEAD
-                const state = await StateDecisionMaker.determineState(score, data);
-
-                const stateStr = UserState[state];
-                if (state === UserState.GAMING) {
-                    console.log(`\x1b[31m[Ingestion] 🚨 GAMING DETECTED! Score: ${score}, State: ${stateStr}\x1b[0m`);
-                } else {
-=======
                 let state = await StateDecisionMaker.determineState(score, data);
 
                 // [Wall 3] AI Verification Loop
@@ -170,7 +148,6 @@ export const startIngestion = async () => {
                     }
                 } else {
                     const stateStr = UserState[state];
->>>>>>> origin/mvp/v5.0.0
                     console.log(`[Ingestion] Score: ${score}, State: ${stateStr}`);
                 }
 
