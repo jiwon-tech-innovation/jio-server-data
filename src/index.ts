@@ -23,6 +23,11 @@ const main = async () => {
     // Serve "src/public" as static files (access via /admin.html)
     app.use(express.static(path.join(__dirname, 'public')));
 
+    // Root Redirect -> admin.html
+    app.get('/', (req, res) => {
+        res.redirect('/admin.html');
+    });
+
     // API: Get Active Blacklist (Client)
     app.get('/api/v1/blacklist', (req, res) => {
         res.json({
