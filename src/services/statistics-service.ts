@@ -1,4 +1,5 @@
 import express, { Request, Response, Router } from 'express';
+import cors from 'cors';
 import { influxDB } from '../config/influx';
 import { QueryApi } from '@influxdata/influxdb-client';
 
@@ -52,25 +53,14 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
     startDate.setDate(endDate.getDate() - 6);
 
     // Flux 쿼리: 일별 집계 (User ID 필터 추가)
-    // Separate queries for score aggregation and game counting
-    const scoreQuery = `
+    const fluxQuery = `
         from(bucket: "${bucket}")
             |> range(start: ${startDate.toISOString()}, stop: ${new Date(endDate.getTime() + 86400000).toISOString()})
-            |> filter(fn: (r) => r["_measurement"] == "user_activity")
+            |> filter(fn: (r) => r["_measurement"] == "system_log")
             |> filter(fn: (r) => r["user_id"] == "${userId}")
-            |> filter(fn: (r) => r["_field"] == "score")
+            |> filter(fn: (r) => r["_field"] == "score" or r["_field"] == "state")
             |> aggregateWindow(every: 1d, fn: mean, createEmpty: true)
             |> yield(name: "daily_stats")
-    `;
-    
-    const gameQuery = `
-        from(bucket: "${bucket}")
-            |> range(start: ${startDate.toISOString()}, stop: ${new Date(endDate.getTime() + 86400000).toISOString()})
-            |> filter(fn: (r) => r["_measurement"] == "user_activity")
-            |> filter(fn: (r) => r["user_id"] == "${userId}")
-            |> filter(fn: (r) => r["category"] == "PLAY")
-            |> aggregateWindow(every: 1d, fn: count, createEmpty: true)
-            |> yield(name: "game_stats")
     `;
 
     try {
@@ -98,9 +88,9 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
             });
         }
 
-        // InfluxDB 쿼리 실행 - Score 데이터
+        // InfluxDB 쿼리 실행
         await new Promise<void>((resolve, reject) => {
-            queryApi.queryRows(scoreQuery, {
+            queryApi.queryRows(fluxQuery, {
                 next(row, tableMeta) {
                     const data = tableMeta.toObject(row);
                     const time = new Date(data._time);
@@ -113,32 +103,8 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
                     }
                 },
                 error(error) {
-                    console.error('[Statistics] InfluxDB Score Query Error:', error);
+                    console.error('[Statistics] InfluxDB Query Error:', error);
                     reject(error);
-                },
-                complete() {
-                    resolve();
-                }
-            });
-        });
-
-        // InfluxDB 쿼리 실행 - Game 카운트 (category == "PLAY")
-        await new Promise<void>((resolve, reject) => {
-            queryApi.queryRows(gameQuery, {
-                next(row, tableMeta) {
-                    const data = tableMeta.toObject(row);
-                    const time = new Date(data._time);
-                    const dateKey = `${String(time.getMonth() + 1).padStart(2, '0')}/${String(time.getDate()).padStart(2, '0')}`;
-
-                    const existing = results.get(dateKey);
-                    if (existing && data._value !== null) {
-                        existing.gameCount += Math.round(data._value as number);
-                    }
-                },
-                error(error) {
-                    console.error('[Statistics] InfluxDB Game Query Error:', error);
-                    // Don't reject - game count is optional
-                    resolve();
                 },
                 complete() {
                     resolve();
@@ -164,7 +130,7 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
                 phoneDetections: 0,  // TODO: 실제 데이터로 교체 시 필드 추가 필요
                 gazeOffCount: 0,
                 drowsyCount: 0,
-                gameCount: value.gameCount || 0  // 게임 카운트는 별도 쿼리에서 설정됨
+                gameCount: 0
             });
         }
 
@@ -216,7 +182,7 @@ async function getHourlyPatternsFromInflux(userId: string): Promise<HourlyPatter
     const fluxQuery = `
         from(bucket: "${bucket}")
             |> range(start: -7d)
-            |> filter(fn: (r) => r["_measurement"] == "user_activity")
+            |> filter(fn: (r) => r["_measurement"] == "system_log")
             |> filter(fn: (r) => r["user_id"] == "${userId}")
             |> filter(fn: (r) => r["_field"] == "score")
             |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
@@ -397,16 +363,19 @@ export function createStatisticsRouter(): Router {
     return router;
 }
 
-import cors from 'cors';
-
 /**
  * Express 서버 시작
  */
 export function startExpressServer(port: number = 3001): void {
     const app = express();
 
+    // CORS 설정
+    app.use(cors({
+        origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+        credentials: true
+    }));
+
     app.use(express.json());
-    app.use(cors()); // Enable CORS for Client Access
 
     // 헬스체크
     app.get('/health', (_req, res) => {

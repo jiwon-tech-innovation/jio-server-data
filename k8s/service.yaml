@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jiaa-data-service
+  namespace: jiaa
+spec:
+  selector:
+    app: jiaa-data-service
+  ports:
+    - name: http-admin
+      protocol: TCP
+      port: 80
+      targetPort: 8083
+    - name: grpc-core
+      protocol: TCP
+      port: 9090
+      targetPort: 9090
+    - name: http-stats
+      protocol: TCP
+      port: 3001
+      targetPort: 3001
+  type: ClusterIP # LoadBalancer or Ingress can be added later

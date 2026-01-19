@@ -15,7 +15,15 @@ declare global {
     }
 }
 
+<<<<<<< HEAD
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'; // TODO: production에서는 반드시 환경변수 사용
+=======
+const JWT_SECRET_RAW = process.env.JWT_SECRET || 'your-secret-key';
+// Spring Boot에서 64자 미만 시크릿은 'x'로 패딩하여 사용
+const JWT_SECRET = JWT_SECRET_RAW.length < 64
+    ? JWT_SECRET_RAW.padEnd(64, 'x')
+    : JWT_SECRET_RAW;
+>>>>>>> origin/mvp/v5.0.0
 
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // 1. 헤더에서 토큰 추출
@@ -32,8 +40,22 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
     }
 
     try {
+<<<<<<< HEAD
         // 2. 토큰 검증
         const decoded = jwt.verify(token, JWT_SECRET) as any;
+=======
+        // 2. 토큰 검증 (HS256, HS384, HS512 모두 지원)
+        // Spring Boot는 시크릿을 그대로 또는 Base64 인코딩하여 사용할 수 있음
+        let decoded: any;
+        try {
+            // 먼저 시크릿을 그대로 사용해서 시도
+            decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256', 'HS384', 'HS512'] });
+        } catch (e) {
+            // 실패하면 Base64 디코딩된 시크릿으로 재시도
+            const base64Secret = Buffer.from(JWT_SECRET, 'base64');
+            decoded = jwt.verify(token, base64Secret, { algorithms: ['HS256', 'HS384', 'HS512'] });
+        }
+>>>>>>> origin/mvp/v5.0.0
 
         // 3. 사용자 정보 req 객체에 저장
         req.user = {

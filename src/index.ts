@@ -1,30 +1,50 @@
 import path from 'path';
 import express from 'express';
+<<<<<<< HEAD
+=======
+import cors from 'cors';
+>>>>>>> origin/mvp/v5.0.0
 import bodyParser from 'body-parser';
 import { BlacklistManager } from './core/blacklist-manager';
 import { startGrpcServer } from './services/score-service';
 import { startIngestion } from './services/ingestion-service';
 import { startExpressServer } from './services/statistics-service';
 import { connectKafka } from './config/kafka';
+<<<<<<< HEAD
 import { writeApi, Point } from './config/influx';
+=======
+>>>>>>> origin/mvp/v5.0.0
 
 const main = async () => {
     console.log('Starting Data Service (Node.js)...');
 
     // 0. Initialize Blacklist Manager
+<<<<<<< HEAD
     const blacklistManager = new BlacklistManager();
 
     // 1. HTTP Server (Express)
     const app = express();
     const port = 8082; // Data Service HTTP Port
 
+=======
+    const blacklistManager = BlacklistManager.getInstance();
+
+    // 1. HTTP Server (Express)
+    const app = express();
+    const port = 8083; // Data Service HTTP Port (8082 is taken by Auth Service)
+
+    app.use(cors());
+>>>>>>> origin/mvp/v5.0.0
     app.use(bodyParser.json());
     // Serve "src/public" as static files (access via /admin.html)
     app.use(express.static(path.join(__dirname, 'public')));
 
+<<<<<<< HEAD
     // Health Check for ALB
     app.get('/health', (req, res) => res.status(200).send('OK'));
 
+=======
+>>>>>>> origin/mvp/v5.0.0
     // API: Get Active Blacklist (Client)
     app.get('/api/v1/blacklist', (req, res) => {
         res.json({
@@ -67,6 +87,30 @@ const main = async () => {
         res.json({ success });
     });
 
+<<<<<<< HEAD
+=======
+    // API: Delete Item (Admin) [NEW]
+    app.delete('/api/v1/blacklist/remove', (req, res) => {
+        const { appName } = req.body;
+        const success = blacklistManager.deleteApp(appName);
+        res.json({ success });
+    });
+
+    // API: Add Blacklist (Admin - Manual)
+    app.post('/api/v1/blacklist/add', (req, res) => {
+        const { appName } = req.body;
+        if (!appName) {
+            res.status(400).json({ success: false, message: "Missing appName" });
+            return;
+        }
+        // 1. Report as game (force creation)
+        blacklistManager.reportApp(appName, true);
+        // 2. Immediately approve
+        const success = blacklistManager.reviewApp(appName, 'APPROVED');
+        res.json({ success });
+    });
+
+>>>>>>> origin/mvp/v5.0.0
     // API: Add Whitelist (Admin)
     app.post('/api/v1/whitelist/add', (req, res) => {
         const { appName } = req.body;
@@ -81,6 +125,7 @@ const main = async () => {
         res.json({ success });
     });
 
+<<<<<<< HEAD
     // API: Generic Log Ingestion (Data Trinity)
     // Writes to InfluxDB 'user_activity' measurement
     app.post('/api/v1/log', async (req, res) => {
@@ -122,6 +167,22 @@ const main = async () => {
             console.error("[API] Log Ingestion Error:", e);
             res.status(500).json({ success: false, message: e.message });
         }
+=======
+    // --- Monitor API (In-Memory) ---
+    let latestClientApps: string[] = [];
+
+    app.post('/api/v1/monitor/apps', (req, res) => {
+        const { apps } = req.body;
+        if (Array.isArray(apps)) {
+            // Filter out empty strings or duplicates if needed
+            latestClientApps = apps;
+        }
+        res.json({ success: true });
+    });
+
+    app.get('/api/v1/monitor/apps', (req, res) => {
+        res.json({ success: true, data: latestClientApps });
+>>>>>>> origin/mvp/v5.0.0
     });
 
     app.listen(port, () => {
@@ -129,6 +190,7 @@ const main = async () => {
         console.log(`[Admin] Dashboard available at http://localhost:${port}/admin.html`);
     });
 
+<<<<<<< HEAD
     // 2. Connect Kafka (non-blocking - continue even if Kafka fails)
     try {
         await connectKafka();
@@ -158,6 +220,20 @@ const main = async () => {
         console.error('[Main] CRITICAL: Statistics server failed to start:', err);
         throw err; // Re-throw to ensure process exits if stats server fails
     }
+=======
+    // 2. Connect Kafka
+    await connectKafka();
+
+    // 3. Start Ingestion Loop
+    await startIngestion();
+
+    // 4. Start gRPC Server (for score streaming)
+    startGrpcServer();
+
+    // 5. Start Express Server (for Statistics REST API)
+    const statsPort = parseInt(process.env.STATS_PORT || '3001');
+    startExpressServer(statsPort);
+>>>>>>> origin/mvp/v5.0.0
 };
 
 main().catch(console.error);
