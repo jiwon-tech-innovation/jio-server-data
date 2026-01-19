@@ -10,26 +10,17 @@ export interface BlacklistItem {
 }
 
 export class BlacklistManager {
-<<<<<<< HEAD
-    private filePath: string;
-    private blacklist: Map<string, BlacklistItem>;
-
-    constructor() {
-=======
     private static instance: BlacklistManager;
     private filePath: string;
     private blacklist: Map<string, BlacklistItem>;
 
     private constructor() {
->>>>>>> origin/mvp/v5.0.0
         // Data stored in 'jiaa-server-data/data/blacklist.json'
         this.filePath = path.join(process.cwd(), 'data', 'blacklist.json');
         this.blacklist = new Map();
         this.load();
     }
 
-<<<<<<< HEAD
-=======
     public static getInstance(): BlacklistManager {
         if (!BlacklistManager.instance) {
             BlacklistManager.instance = new BlacklistManager();
@@ -37,7 +28,6 @@ export class BlacklistManager {
         return BlacklistManager.instance;
     }
 
->>>>>>> origin/mvp/v5.0.0
     private load() {
         try {
             if (fs.existsSync(this.filePath)) {
@@ -114,8 +104,6 @@ export class BlacklistManager {
         }
         return false;
     }
-<<<<<<< HEAD
-=======
 
     public deleteApp(appName: string): boolean {
         if (this.blacklist.has(appName)) {
@@ -126,5 +114,4 @@ export class BlacklistManager {
         }
         return false;
     }
->>>>>>> origin/mvp/v5.0.0
 }
