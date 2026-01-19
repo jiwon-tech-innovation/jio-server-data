@@ -28,6 +28,9 @@ const main = async () => {
         res.redirect('/admin.html');
     });
 
+    // Health Check for ALB
+    app.get('/health', (req, res) => res.status(200).send('OK'));
+
     // API: Get Active Blacklist (Client)
     app.get('/api/v1/blacklist', (req, res) => {
         res.json({
