@@ -72,79 +72,84 @@
     <h1>🛡️ JIAA Admin Dashboard</h1>
     <div id="stats">Loading...</div>
 
+    <<<<<<< HEAD <h2>🚨 Blacklist Review (Pending Games)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>App Name</th>
+                    =======
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>🚨 Blacklist Review</h2>
+                        <button id="btn-sort" onclick="toggleSort()" style="background:#555; color:white;">Sort by Date
+                            📅</button>
+                    </div>
+
+                    <!-- Live Process Monitor -->
+                    <h3>📱 Live Client Processes (Auto-refresh)</h3>
+                    <div
+                        style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 20px; max-height: 150px; overflow-y: auto;">
+                        <ul id="live-apps-list"
+                            style="list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 10px;">
+                            <li>Loading...</li>
+                        </ul>
+                    </div>
+
+                    </div>
+
+                    <!-- Manual Blacklist Add -->
+                    <h3>🚫 Blacklist Management (Manual Add)</h3>
+                    <div style="margin: 10px 0;">
+                        <input type="text" id="blacklist-input" placeholder="Enter app name (e.g. League of Legends)" />
+                        <button class="btn-approve" style="background-color:#d32f2f;" onclick="addToBlacklist()">Block
+                            App</button>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>App Name / Last Seen</th>
+                                >>>>>>> origin/mvp/v5.0.0
+                                <th>Status</th>
+                                <th>Reports</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="list-body"></tbody>
+                    </table>
+
+                    <h2>✅ Whitelist Management (Safe Apps)</h2>
+                    <div style="margin: 10px 0;">
+                        <input type="text" id="whitelist-input" placeholder="Enter app name (e.g. VSCode)" />
+                        <button class="btn-approve" onclick="addToWhitelist()">Add Safe App</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>App Name</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="whitelist-body"></tbody>
+                    </table>
+
+                    <script>
+<<<<<<< Updated upstream
 <<<<<<< HEAD
-    <h2>🚨 Blacklist Review (Pending Games)</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>App Name</th>
+                        const API_URL = 'http://localhost:8082/api/v1';
 =======
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h2>🚨 Blacklist Review</h2>
-        <button id="btn-sort" onclick="toggleSort()" style="background:#555; color:white;">Sort by Date 📅</button>
-    </div>
-
-    <!-- Live Process Monitor -->
-    <h3>📱 Live Client Processes (Auto-refresh)</h3>
-    <div
-        style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 20px; max-height: 150px; overflow-y: auto;">
-        <ul id="live-apps-list"
-            style="list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 10px;">
-            <li>Loading...</li>
-        </ul>
-    </div>
-
-    </div>
-
-    <!-- Manual Blacklist Add -->
-    <h3>🚫 Blacklist Management (Manual Add)</h3>
-    <div style="margin: 10px 0;">
-        <input type="text" id="blacklist-input" placeholder="Enter app name (e.g. League of Legends)" />
-        <button class="btn-approve" style="background-color:#d32f2f;" onclick="addToBlacklist()">Block App</button>
-    </div>
-
-    <table>
-        <thead>
-            <tr>
-                <th>App Name / Last Seen</th>
->>>>>>> origin/mvp/v5.0.0
-                <th>Status</th>
-                <th>Reports</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="list-body"></tbody>
-    </table>
-
-    <h2>✅ Whitelist Management (Safe Apps)</h2>
-    <div style="margin: 10px 0;">
-        <input type="text" id="whitelist-input" placeholder="Enter app name (e.g. VSCode)" />
-        <button class="btn-approve" onclick="addToWhitelist()">Add Safe App</button>
-    </div>
-    <table>
-        <thead>
-            <tr>
-                <th>App Name</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="whitelist-body"></tbody>
-    </table>
-
-    <script>
-<<<<<<< HEAD
-        const API_URL = 'http://localhost:8082/api/v1';
-=======
-        const API_URL = 'http://localhost:8083/api/v1';
+const API_URL = '/api/v1';
 
         // 'status' or 'date'
         let currentSortMode = 'status';
 >>>>>>> origin/mvp/v5.0.0
+=======
+        const API_URL = '/api/v1';
+>>>>>>> Stashed changes
 
-        async function init() {
-            await fetchBlacklist();
-            await fetchWhitelist();
+                        async function init() {
+                            await fetchBlacklist();
+                            await fetchWhitelist();
 <<<<<<< HEAD
 =======
 
@@ -197,32 +202,32 @@
             const input = document.getElementById('blacklist-input');
             input.value = appName;
             // Optional: Auto-click? Let's just fill for safety
-            // await addToBlacklist(); 
+            // await addToBlacklist();
 >>>>>>> origin/mvp/v5.0.0
-        }
+                        }
 
-        async function fetchBlacklist() {
-            const res = await fetch(`${API_URL}/blacklist/all`);
-            const json = await res.json();
-            renderBlacklist(json.data);
-        }
+                        async function fetchBlacklist() {
+                            const res = await fetch(`${API_URL}/blacklist/all`);
+                            const json = await res.json();
+                            renderBlacklist(json.data);
+                        }
 
-        async function fetchWhitelist() {
-            const res = await fetch(`${API_URL}/whitelist`);
-            const json = await res.json();
-            renderWhitelist(json.data);
-        }
+                        async function fetchWhitelist() {
+                            const res = await fetch(`${API_URL}/whitelist`);
+                            const json = await res.json();
+                            renderWhitelist(json.data);
+                        }
 
-        function renderBlacklist(items) {
-            const tbody = document.getElementById('list-body');
-            tbody.innerHTML = '';
+                        function renderBlacklist(items) {
+                            const tbody = document.getElementById('list-body');
+                            tbody.innerHTML = '';
 
 <<<<<<< HEAD
-            items.sort((a, b) => {
-                if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
-                if (a.status !== 'PENDING' && b.status === 'PENDING') return 1;
-                return b.reportCount - a.reportCount;
-            });
+                            items.sort((a, b) => {
+                                if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
+                                if (a.status !== 'PENDING' && b.status === 'PENDING') return 1;
+                                return b.reportCount - a.reportCount;
+                            });
 =======
             // Sorting Logic
             if (currentSortMode === 'date') {
@@ -238,25 +243,25 @@
             }
 >>>>>>> origin/mvp/v5.0.0
 
-            const pendingCount = items.filter(i => i.status === 'PENDING').length;
-            document.getElementById('stats').innerText = `Pending Reviews: ${pendingCount} | Total Tracked: ${items.length}`;
+                            const pendingCount = items.filter(i => i.status === 'PENDING').length;
+                            document.getElementById('stats').innerText = `Pending Reviews: ${pendingCount} | Total Tracked: ${items.length}`;
 
-            items.forEach(item => {
-                // Hide Whitelisted items from this list to reduce clutter
-                if (item.status === 'WHITELISTED') return;
+                            items.forEach(item => {
+                                // Hide Whitelisted items from this list to reduce clutter
+                                if (item.status === 'WHITELISTED') return;
 
 <<<<<<< HEAD
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
+                                const tr = document.createElement('tr');
+                                tr.innerHTML = `
                     <td>${item.appName}</td>
 =======
                 const dateStr = new Date(item.lastReportedAt).toLocaleString();
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>
+                                    < td >
                         <div style="font-weight:bold;">${item.appName}</div>
                         <div style="font-size:0.8em; color:#666;">Last Seen: ${dateStr}</div>
-                    </td>
+                    </td >
 >>>>>>> origin/mvp/v5.0.0
                     <td class="${item.status}">${item.status}</td>
                     <td>${item.reportCount}</td>
@@ -269,12 +274,12 @@
                         ` : item.status}
 =======
                             <button class="btn-reject" style="background-color:#999;" onclick="review('${item.appName}', 'REJECTED')">Ignore</button>
-                            <button class="btn-approve" style="background-color:#2196F3" onclick="review('${item.appName}', 'WHITELISTED')">Whitelist</button>
+                                        <button class="btn-approve" style="background-color:#2196F3" onclick="review('${item.appName}', 'WHITELISTED')">Whitelist</button>
                         ` : ''}
-                        <button class="btn-reject" onclick="deleteItem('${item.appName}')">❌ Delete</button>
+                                        <button class="btn-reject" onclick="deleteItem('${item.appName}')">❌ Delete</button>
 >>>>>>> origin/mvp/v5.0.0
-                    </td>
-                `;
+                                    </td>
+                                `;
                 tbody.appendChild(tr);
             });
         }
@@ -286,24 +291,24 @@
             items.forEach(item => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${item.appName}</td>
+                                    < td > ${ item.appName }</td >
                     <td class="APPROVED" style="color:#2196F3">SAFE</td>
                     <td>
 <<<<<<< HEAD
-                        <button class="btn-reject" onclick="review('${item.appName}', 'REJECTED')">Remove</button>
+                                <button class="btn-reject" onclick="review('${item.appName}', 'REJECTED')">Remove</button>
 =======
                         <button class="btn-reject" onclick="deleteItem('${item.appName}')">❌ Remove</button>
 >>>>>>> origin/mvp/v5.0.0
-                    </td>
-                `;
+                    </td >
+                                    `;
                 tbody.appendChild(tr);
             });
         }
 
         async function review(appName, status) {
-            if (!confirm(`Mark '${appName}' as ${status}?`)) return;
+            if (!confirm(`Mark '${appName}' as ${ status }?`)) return;
 
-            await fetch(`${API_URL}/blacklist/review`, {
+            await fetch(`${ API_URL } /blacklist/review`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ appName, status })
@@ -314,9 +319,9 @@
 <<<<<<< HEAD
 =======
         async function deleteItem(appName) {
-            if (!confirm(`⚠️ Are you sure you want to PERMANENTLY DELETE '${appName}'?`)) return;
+            if (!confirm(`⚠️ Are you sure you want to PERMANENTLY DELETE '${appName}' ? `)) return;
 
-            await fetch(`${API_URL}/blacklist/remove`, {
+            await fetch(`${ API_URL } /blacklist/remove`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ appName })
@@ -330,7 +335,7 @@
             const appName = input.value.trim();
             if (!appName) return;
 
-            await fetch(`${API_URL}/whitelist/add`, {
+            await fetch(`${ API_URL } /whitelist/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ appName })
@@ -346,7 +351,7 @@
             const appName = input.value.trim();
             if (!appName) return;
 
-            await fetch(`${API_URL}/blacklist/add`, {
+            await fetch(`${ API_URL } /blacklist/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ appName })
@@ -357,7 +362,7 @@
 
 >>>>>>> origin/mvp/v5.0.0
         init();
-    </script>
+                    </script>
 </body>
 
 </html>
