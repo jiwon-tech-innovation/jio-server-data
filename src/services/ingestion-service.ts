@@ -13,31 +13,60 @@ let previousState: UserState | null = null;
 
 
 // [Wall 3] AI Verification Helper
+import * as grpc from '@grpc/grpc-js';
+import * as protoLoader from '@grpc/proto-loader';
+import path from 'path';
+
+// gRPC Setup
+const PROTO_PATH = path.join(__dirname, '../protos/intelligence.proto');
+const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+    keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
+});
+const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;
+const intelligenceService = protoDescriptor.jiaa.intelligence.IntelligenceService;
+
+// Connect to AI Infrastructure
+const AI_GRPC_URL = process.env.AI_GRPC_URL || 'api.jiobserver.cloud:443';
+const client = new intelligenceService(AI_GRPC_URL, grpc.credentials.createSsl());
+
+// [Wall 3] AI Verification Helper via gRPC
 async function classifyContent(windowTitle: string): Promise<{ state: string, reason: string }> {
-    try {
-        const response = await fetch('http://localhost:8000/api/v1/classify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content_type: 'WINDOW',
-                process_info: {
-                    process_name: 'unknown', // not critical for logic
-                    window_title: windowTitle
-                }
-            })
+    return new Promise((resolve) => {
+        const request = {
+            url: '',
+            window_title: windowTitle
+        };
+
+        console.log(`[Wall 3] gRPC Calling AnalyzeUrl to ${AI_GRPC_URL}...`);
+
+        client.AnalyzeUrl(request, (err: any, response: any) => {
+            if (err) {
+                console.error(`[AI] gRPC Error: ${err.message}`);
+                // Fail-safe: Assume PLAY if AI is unreachable/error
+                resolve({ state: 'PLAY', reason: 'gRPC_ERROR' });
+                return;
+            }
+
+            // Map Enum String (STUDY, PLAY, ETC) to UserState string logic
+            // Proto Enum: URL_UNKNOWN=0, STUDY=1, PLAY=2, NEUTRAL=3, WORK=4
+            // Response typically returns string "STUDY" or "PLAY" if enums=String in loader
+
+            let state = 'PLAY';
+            // Proto Enum: UNKNOWN=0, STUDY=1, PLAY=2, WORK=3
+            if (response.category === 'STUDY' || response.category === 'WORK') {
+                state = 'STUDY'; // Treat work as STUDY/SAFE
+            }
+
+            resolve({
+                state: state,
+                reason: response.reason || 'AI Judgment'
+            });
         });
-
-        if (!response.ok) {
-            console.error(`[AI] Classification failed: ${response.status}`);
-            return { state: 'PLAY', reason: 'AI_ERROR' }; // Fail-safe: Assume worst? Or assume innocent? Let's assume PLAY to match original logic if AI fails? actually maybe safer to stick to original heuristic.
-        }
-
-        const json = await response.json();
-        return { state: json.state, reason: json.reason };
-    } catch (e) {
-        console.error(`[AI] Error calling AI service:`, e);
-        return { state: 'PLAY', reason: 'NETWORK_ERROR' };
-    }
+    });
 }
 
 export const startIngestion = async () => {

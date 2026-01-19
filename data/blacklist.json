@@ -26,5 +26,12 @@
     "status": "APPROVED",
     "reportCount": 1,
     "lastReportedAt": 1768738048369
+  },
+  {
+    "appName": "Instagram",
+    "isGame": true,
+    "status": "APPROVED",
+    "reportCount": 1,
+    "lastReportedAt": 1768785546625
   }
 ]

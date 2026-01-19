@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package jiaa.intelligence;
+
+option java_multiple_files = true;
+option java_package = "com.jiaa.common.intelligence";
+
+service IntelligenceService {
+  // 1. URL 분석 (승민 -> 윤성)
+  rpc AnalyzeUrl(UrlRequest) returns (UrlResponse);
+
+  // 2. 에러 로그 해결 (승민 -> 윤성)
+  rpc SolveError(ErrorLogRequest) returns (ErrorSolutionResponse);
+}
+
+// --- URL 관련 메시지 ---
+message UrlRequest {
+  string url = 1;
+  string window_title = 2;
+}
+
+message UrlResponse {
+  enum Category {
+    UNKNOWN = 0;
+    STUDY = 1;      // 인강, IDE, 문서
+    PLAY = 2;       // 유튜브, 게임, 웹툰
+    WORK = 3;       // 협업 툴
+  }
+  Category category = 1;
+  float confidence = 2;     // 확신도 (0.0 ~ 1.0)
+}
+
+// --- RAG 관련 메시지 ---
+message ErrorLogRequest {
+  string error_message = 1; // "NullPointerException..."
+  string context = 2;       // 언어 환경 ("Java", "Python")
+}
+
+message ErrorSolutionResponse {
+  string markdown_content = 1; // 해결책 (마크다운 포맷)
+}
