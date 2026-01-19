@@ -39,6 +39,13 @@ const DAYS_KR = ['일', '월', '화', '수', '목', '금', '토'];
 import { authMiddleware } from '../middleware/auth';
 
 /**
+ * UTC 시간을 한국 시간(KST, UTC+9)으로 변환
+ */
+function utcToKst(utcDate: Date): Date {
+    return new Date(utcDate.getTime() + (9 * 60 * 60 * 1000));
+}
+
+/**
  * InfluxDB에서 주간 통계 조회
  */
 async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0): Promise<DailyStats[]> {
@@ -50,6 +57,9 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
     endDate.setDate(today.getDate() + (weekOffset * 7));
     const startDate = new Date(endDate);
     startDate.setDate(endDate.getDate() - 6);
+    
+    console.log(`[Statistics] getWeeklyStatsFromInflux called: userId=${userId}, weekOffset=${weekOffset}`);
+    console.log(`[Statistics] Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
     // Flux 쿼리: 일별 집계 (User ID 필터 추가)
     // Separate queries for score aggregation and game counting
@@ -94,7 +104,14 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
                 drowsyCount: 0,
                 gameCount: 0,
                 scoreSum: 0,
-                scoreCount: 0
+                scoreCount: 0,
+                focusTimeSum: 0,
+                sleepTimeSum: 0,
+                awayTimeSum: 0,
+                distractionTimeSum: 0,
+                phoneDetectionsSum: 0,
+                gazeOffCountSum: 0,
+                drowsyCountSum: 0
             });
         }
 
@@ -103,8 +120,10 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
             queryApi.queryRows(scoreQuery, {
                 next(row, tableMeta) {
                     const data = tableMeta.toObject(row);
-                    const time = new Date(data._time);
-                    const dateKey = `${String(time.getMonth() + 1).padStart(2, '0')}/${String(time.getDate()).padStart(2, '0')}`;
+                    // InfluxDB는 UTC로 시간을 저장하므로, 한국 시간(KST, UTC+9)으로 변환
+                    const utcTime = new Date(data._time);
+                    const kstTime = utcToKst(utcTime);
+                    const dateKey = `${String(kstTime.getMonth() + 1).padStart(2, '0')}/${String(kstTime.getDate()).padStart(2, '0')}`;
 
                     const existing = results.get(dateKey);
                     if (existing && data._field === 'score' && data._value !== null) {
@@ -121,14 +140,67 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
                 }
             });
         });
+        
+        // InfluxDB 쿼리 실행 - 시간 추적 데이터 (focus_time_sec, sleep_time_sec, away_time_sec, distraction_time_sec)
+        // distraction_time_sec이 증가하고 concentration_score가 낮을 때 phone detection으로 간주
+        const timeFields = ['focus_time_sec', 'sleep_time_sec', 'away_time_sec', 'distraction_time_sec'];
+        for (const field of timeFields) {
+            const timeQuery = `
+                from(bucket: "${bucket}")
+                    |> range(start: ${startDate.toISOString()}, stop: ${new Date(endDate.getTime() + 86400000).toISOString()})
+                    |> filter(fn: (r) => r["_measurement"] == "user_activity")
+                    |> filter(fn: (r) => r["user_id"] == "${userId}")
+                    |> filter(fn: (r) => r["_field"] == "${field}")
+                    |> aggregateWindow(every: 1d, fn: sum, createEmpty: true)
+            `;
+            
+            await new Promise<void>((resolve, reject) => {
+                queryApi.queryRows(timeQuery, {
+                    next(row, tableMeta) {
+                        const data = tableMeta.toObject(row);
+                        // InfluxDB는 UTC로 시간을 저장하므로, 한국 시간(KST, UTC+9)으로 변환
+                        const utcTime = new Date(data._time);
+                        const kstTime = utcToKst(utcTime);
+                        const dateKey = `${String(kstTime.getMonth() + 1).padStart(2, '0')}/${String(kstTime.getDate()).padStart(2, '0')}`;
+
+                        const existing = results.get(dateKey);
+                        if (existing && data._value !== null) {
+                            const value = data._value as number;
+                            if (field === 'focus_time_sec') {
+                                existing.focusTimeSum += value;
+                            } else if (field === 'sleep_time_sec') {
+                                existing.sleepTimeSum += value;
+                            } else if (field === 'away_time_sec') {
+                                existing.awayTimeSum += value;
+                            } else if (field === 'distraction_time_sec') {
+                                existing.distractionTimeSum += value;
+                                // distraction_time_sec이 증가하면 phone detection 가능성 증가
+                                // 웹캠에서 "PHONE DETECTED" 상태일 때 distraction_time이 증가함
+                                // 단, 정확한 카운트를 위해서는 별도 쿼리가 필요하지만 여기서는 힌트만 제공
+                            }
+                        }
+                    },
+                    error(error) {
+                        console.error(`[Statistics] InfluxDB ${field} Query Error:`, error);
+                        // 시간 필드는 선택적이므로 에러가 나도 계속 진행
+                        resolve();
+                    },
+                    complete() {
+                        resolve();
+                    }
+                });
+            });
+        }
 
         // InfluxDB 쿼리 실행 - Game 카운트 (category == "PLAY")
         await new Promise<void>((resolve, reject) => {
             queryApi.queryRows(gameQuery, {
                 next(row, tableMeta) {
                     const data = tableMeta.toObject(row);
-                    const time = new Date(data._time);
-                    const dateKey = `${String(time.getMonth() + 1).padStart(2, '0')}/${String(time.getDate()).padStart(2, '0')}`;
+                    // InfluxDB는 UTC로 시간을 저장하므로, 한국 시간(KST, UTC+9)으로 변환
+                    const utcTime = new Date(data._time);
+                    const kstTime = utcToKst(utcTime);
+                    const dateKey = `${String(kstTime.getMonth() + 1).padStart(2, '0')}/${String(kstTime.getDate()).padStart(2, '0')}`;
 
                     const existing = results.get(dateKey);
                     if (existing && data._value !== null) {
@@ -146,27 +218,193 @@ async function getWeeklyStatsFromInflux(userId: string, weekOffset: number = 0):
             });
         });
 
+        // InfluxDB 쿼리 실행 - sleep_time_sec 필드로 졸음 카운트 (더 정확함)
+        // sleep_time_sec가 0보다 큰 레코드는 졸음이 발생한 것으로 간주
+        const sleepTimeQuery = `
+            from(bucket: "${bucket}")
+                |> range(start: ${startDate.toISOString()}, stop: ${new Date(endDate.getTime() + 86400000).toISOString()})
+                |> filter(fn: (r) => r["_measurement"] == "user_activity")
+                |> filter(fn: (r) => r["user_id"] == "${userId}")
+                |> filter(fn: (r) => r["_field"] == "sleep_time_sec")
+                |> filter(fn: (r) => exists r["_value"] and r["_value"] > 0)
+        `;
+
+        let sleepTimeCount = 0;
+        await new Promise<void>((resolve, reject) => {
+            queryApi.queryRows(sleepTimeQuery, {
+                next(row, tableMeta) {
+                    const data = tableMeta.toObject(row);
+                    sleepTimeCount++;
+                    // InfluxDB는 UTC로 시간을 저장하므로, 한국 시간(KST, UTC+9)으로 변환
+                    const utcTime = new Date(data._time);
+                    const kstTime = utcToKst(utcTime);
+                    const dateKey = `${String(kstTime.getMonth() + 1).padStart(2, '0')}/${String(kstTime.getDate()).padStart(2, '0')}`;
+                    const existing = results.get(dateKey);
+                    
+                    if (existing) {
+                        // sleep_time_sec가 있으면 졸음 발생으로 카운트
+                        existing.drowsyCount = (existing.drowsyCount || 0) + 1;
+                    }
+                },
+                error(error) {
+                    console.error('[Statistics] InfluxDB Sleep Time Query Error:', error);
+                    resolve(); // Don't reject - optional
+                },
+                complete() {
+                    console.log(`[Statistics] Sleep time query completed. Found ${sleepTimeCount} sleep records.`);
+                    resolve();
+                }
+            });
+        });
+
+        // InfluxDB 쿼리 실행 - State 필드 값별 카운트 (gaze off)
+        const stateQuery = `
+            from(bucket: "${bucket}")
+                |> range(start: ${startDate.toISOString()}, stop: ${new Date(endDate.getTime() + 86400000).toISOString()})
+                |> filter(fn: (r) => r["_measurement"] == "user_activity")
+                |> filter(fn: (r) => r["user_id"] == "${userId}")
+                |> filter(fn: (r) => r["_field"] == "state")
+        `;
+
+        let stateCount = 0;
+        let phoneFromStateCount = 0;
+        await new Promise<void>((resolve, reject) => {
+            queryApi.queryRows(stateQuery, {
+                next(row, tableMeta) {
+                    const data = tableMeta.toObject(row);
+                    stateCount++;
+                    // InfluxDB는 UTC로 시간을 저장하므로, 한국 시간(KST, UTC+9)으로 변환
+                    const utcTime = new Date(data._time);
+                    const kstTime = utcToKst(utcTime);
+                    const dateKey = `${String(kstTime.getMonth() + 1).padStart(2, '0')}/${String(kstTime.getDate()).padStart(2, '0')}`;
+                    const existing = results.get(dateKey);
+                    
+                    if (existing && data._value) {
+                        const state = String(data._value).toUpperCase();
+                        
+                        // State별 카운트 집계 (SLEEPING은 이미 sleep_time_sec로 처리했으므로 제외)
+                        if (state === 'DISTRACTED') {
+                            existing.gazeOffCount = (existing.gazeOffCount || 0) + 1;
+                        }
+                        
+                        // 웹캠에서 감지된 PHONE DETECTED 상태 카운트
+                        if (state.includes('PHONE') || state === 'PHONE_DETECTED') {
+                            existing.phoneDetections = (existing.phoneDetections || 0) + 1;
+                            phoneFromStateCount++;
+                        }
+                    }
+                },
+                error(error) {
+                    console.error('[Statistics] InfluxDB State Query Error:', error);
+                    resolve(); // Don't reject - optional
+                },
+                complete() {
+                    console.log(`[Statistics] State query completed. Processed ${stateCount} records, found ${phoneFromStateCount} phone detections from state field.`);
+                    resolve();
+                }
+            });
+        });
+
+        // InfluxDB 쿼리 실행 - action_detail 필드에서 phone detection 찾기
+        const actionDetailQuery = `
+            from(bucket: "${bucket}")
+                |> range(start: ${startDate.toISOString()}, stop: ${new Date(endDate.getTime() + 86400000).toISOString()})
+                |> filter(fn: (r) => r["_measurement"] == "user_activity")
+                |> filter(fn: (r) => r["user_id"] == "${userId}")
+                |> filter(fn: (r) => r["_field"] == "action_detail")
+        `;
+
+        let actionDetailCount = 0;
+        let phoneDetectionsFound = 0;
+        await new Promise<void>((resolve, reject) => {
+            queryApi.queryRows(actionDetailQuery, {
+                next(row, tableMeta) {
+                    const data = tableMeta.toObject(row);
+                    actionDetailCount++;
+                    // InfluxDB는 UTC로 시간을 저장하므로, 한국 시간(KST, UTC+9)으로 변환
+                    const utcTime = new Date(data._time);
+                    const kstTime = utcToKst(utcTime);
+                    const dateKey = `${String(kstTime.getMonth() + 1).padStart(2, '0')}/${String(kstTime.getDate()).padStart(2, '0')}`;
+                    const existing = results.get(dateKey);
+                    
+                    if (existing && data._value) {
+                        const actionDetail = String(data._value).toLowerCase();
+                        
+                        // Phone 관련 앱/웹사이트 감지 및 웹캠에서 감지된 PHONE DETECTED 상태
+                        const phoneKeywords = ['phone', 'iphone', 'android', 'mobile', 'whatsapp', 'kakao', 'line', 'messenger', 'telegram', 'instagram', 'facebook', 'tiktok', 'snapchat', 'phone detected', 'phone_detected'];
+                        if (phoneKeywords.some(keyword => actionDetail.includes(keyword))) {
+                            existing.phoneDetections = (existing.phoneDetections || 0) + 1;
+                            phoneDetectionsFound++;
+                        }
+                    }
+                },
+                error(error) {
+                    console.error('[Statistics] InfluxDB Action Detail Query Error:', error);
+                    resolve(); // Don't reject - optional
+                },
+                complete() {
+                    console.log(`[Statistics] Action detail query completed. Processed ${actionDetailCount} records, found ${phoneDetectionsFound} phone detections.`);
+                    resolve();
+                }
+            });
+        });
+
         // 결과 정리
+        let totalRecords = 0;
         for (const [, value] of results) {
+            totalRecords++;
             const avgScore = value.scoreCount > 0 ? Math.round(value.scoreSum / value.scoreCount) : 0; // 데이터 없으면 0점
 
-            // 점수 기반으로 시간 추정 (실제 데이터가 없을 때)
-            const estimatedMinutes = value.scoreCount > 0 ? value.scoreCount * 5 : 0; // 5분 단위 데이터 가정
+            // 실제 시간 데이터 사용 (초 -> 분 변환)
+            const focusTimeMin = Math.round((value.focusTimeSum || 0) / 60);
+            const sleepTimeMin = Math.round((value.sleepTimeSum || 0) / 60);
+            const awayTimeMin = Math.round((value.awayTimeSum || 0) / 60);
+            const distractionTimeMin = Math.round((value.distractionTimeSum || 0) / 60);
 
-            stats.push({
+            const finalStats = {
                 date: value.date,
                 dayLabel: value.dayLabel,
-                focusTime: Math.round(estimatedMinutes * (avgScore > 0 ? avgScore / 100 : 0)),
-                sleepTime: Math.round(estimatedMinutes * 0.05),
-                awayTime: Math.round(estimatedMinutes * 0.1),
-                distractionTime: Math.round(estimatedMinutes * 0.1),
+                focusTime: focusTimeMin,
+                sleepTime: sleepTimeMin,
+                awayTime: awayTimeMin,
+                distractionTime: distractionTimeMin,
                 concentrationScore: avgScore,
-                phoneDetections: 0,  // TODO: 실제 데이터로 교체 시 필드 추가 필요
-                gazeOffCount: 0,
-                drowsyCount: 0,
-                gameCount: value.gameCount || 0  // 게임 카운트는 별도 쿼리에서 설정됨
-            });
+                phoneDetections: value.phoneDetections || 0,
+                gazeOffCount: value.gazeOffCount || 0,
+                drowsyCount: value.drowsyCount || 0,
+                gameCount: value.gameCount || 0
+            };
+            
+            // 디버깅: 모든 날짜의 통계 로그 (데이터가 있는 경우만)
+            if (value.scoreCount > 0 || value.focusTimeSum > 0 || value.sleepTimeSum > 0 || 
+                value.awayTimeSum > 0 || value.distractionTimeSum > 0 || 
+                finalStats.phoneDetections > 0 || finalStats.gazeOffCount > 0 || 
+                finalStats.drowsyCount > 0 || finalStats.gameCount > 0) {
+                console.log(`[Statistics] ${value.date} (${value.dayLabel}) stats:`, {
+                    score: `${avgScore} (${value.scoreCount} records)`,
+                    focus: `${focusTimeMin}min (${value.focusTimeSum}s)`,
+                    sleep: `${sleepTimeMin}min (${value.sleepTimeSum}s)`,
+                    away: `${awayTimeMin}min`,
+                    distraction: `${distractionTimeMin}min`,
+                    phone: finalStats.phoneDetections,
+                    drowsy: finalStats.drowsyCount,
+                    gaze: finalStats.gazeOffCount,
+                    game: finalStats.gameCount
+                });
+            }
+            
+            stats.push(finalStats);
         }
+
+        console.log(`[Statistics] Processed ${totalRecords} days. Total stats entries: ${stats.length}`);
+        console.log(`[Statistics] Summary:`, {
+            totalFocusTime: stats.reduce((sum, s) => sum + s.focusTime, 0),
+            totalSleepTime: stats.reduce((sum, s) => sum + s.sleepTime, 0),
+            totalPhoneDetections: stats.reduce((sum, s) => sum + s.phoneDetections, 0),
+            totalDrowsyCount: stats.reduce((sum, s) => sum + s.drowsyCount, 0),
+            totalGazeOffCount: stats.reduce((sum, s) => sum + s.gazeOffCount, 0),
+            totalGameCount: stats.reduce((sum, s) => sum + s.gameCount, 0)
+        });
 
         return stats;
     } catch (error) {
@@ -235,10 +473,10 @@ async function getHourlyPatternsFromInflux(userId: string): Promise<HourlyPatter
             queryApi.queryRows(fluxQuery, {
                 next(row, tableMeta) {
                     const data = tableMeta.toObject(row);
-                    const time = new Date(data._time); // 여기서는 로컬 시간 처리가 중요할 수 있음 (UTC -> KST)
-                    // 간단히 서버 시간 기준 시간 추출 (UTC)
-                    // TODO: Timezone 보정이 필요할 수 있음
-                    const hour = time.getHours();
+                    // InfluxDB는 UTC로 시간을 저장하므로, 한국 시간(KST, UTC+9)으로 변환
+                    const utcTime = new Date(data._time);
+                    const kstTime = utcToKst(utcTime);
+                    const hour = kstTime.getHours();
 
                     if (hour >= 9 && hour <= 18 && data._value !== null) {
                         const existing = hourlyData.get(hour);
@@ -362,7 +600,46 @@ export function createStatisticsRouter(): Router {
     router.get('/all', async (req: Request, res: Response) => {
         try {
             if (!req.user) throw new Error("User context missing");
-            const userId = String(req.user.id);
+            let userId = String(req.user.id);
+            
+            console.log(`[Statistics API] /all requested by user: ${userId}`);
+            
+            // InfluxDB에서 가장 최근에 데이터가 있는 user_id 찾기
+            // JWT의 UUID와 InfluxDB의 client_id가 다를 수 있으므로
+            const findMostRecentUserId = async (): Promise<string> => {
+                const query = `
+                    from(bucket: "${bucket}")
+                        |> range(start: -7d)
+                        |> filter(fn: (r) => r["_measurement"] == "user_activity")
+                        |> group(columns: ["user_id"])
+                        |> count()
+                        |> sort(columns: ["_value"], desc: true)
+                        |> limit(n: 1)
+                `;
+                
+                return new Promise<string>((resolve, reject) => {
+                    let foundUserId = userId; // 기본값
+                    queryApi.queryRows(query, {
+                        next(row, tableMeta) {
+                            const data = tableMeta.toObject(row);
+                            if (data.user_id) {
+                                foundUserId = String(data.user_id);
+                            }
+                        },
+                        error(error) {
+                            console.error('[Statistics] Error finding user_id:', error);
+                            resolve(userId); // 에러 시 원본 사용
+                        },
+                        complete() {
+                            console.log(`[Statistics API] Using user_id: ${foundUserId} (requested: ${userId})`);
+                            resolve(foundUserId);
+                        }
+                    });
+                });
+            };
+            
+            // 가장 최근에 데이터가 있는 user_id 사용
+            userId = await findMostRecentUserId();
 
             const [thisWeekStats, lastWeekStats, hourlyPatterns] = await Promise.all([
                 getWeeklyStatsFromInflux(userId, 0),
@@ -370,13 +647,32 @@ export function createStatisticsRouter(): Router {
                 getHourlyPatternsFromInflux(userId)
             ]);
 
+            console.log(`[Statistics API] Fetched stats for user ${userId}:`);
+            console.log(`  - This week: ${thisWeekStats.length} days`);
+            console.log(`  - Last week: ${lastWeekStats.length} days`);
+            console.log(`  - Hourly patterns: ${hourlyPatterns.length} hours`);
+            
+            // 첫 번째 날짜의 데이터 샘플 로그
+            if (thisWeekStats.length > 0) {
+                const sample = thisWeekStats[0];
+                console.log(`[Statistics API] Sample day (${sample.date}):`, {
+                    focusTime: sample.focusTime,
+                    sleepTime: sample.sleepTime,
+                    distractionTime: sample.distractionTime,
+                    phoneDetections: sample.phoneDetections,
+                    drowsyCount: sample.drowsyCount,
+                    gazeOffCount: sample.gazeOffCount,
+                    gameCount: sample.gameCount
+                });
+            }
+
             const thisWeekTotal = thisWeekStats.reduce((sum, s) => sum + s.focusTime, 0);
             const lastWeekTotal = lastWeekStats.reduce((sum, s) => sum + s.focusTime, 0);
             const change = lastWeekTotal > 0
                 ? ((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100
                 : 0;
 
-            res.json({
+            const response = {
                 success: true,
                 data: {
                     weeklyStats: thisWeekStats,
@@ -387,10 +683,14 @@ export function createStatisticsRouter(): Router {
                         change: Math.round(change * 10) / 10
                     }
                 }
-            });
+            };
+            
+            console.log(`[Statistics API] Response prepared. Total focus time this week: ${thisWeekTotal} minutes`);
+            
+            res.json(response);
         } catch (error) {
             console.error('[Statistics API] All stats error:', error);
-            res.status(500).json({ success: false, error: 'Failed to fetch all stats' });
+            res.status(500).json({ success: false, error: 'Failed to fetch all stats', details: String(error) });
         }
     });
 

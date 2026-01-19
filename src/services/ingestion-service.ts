@@ -116,6 +116,34 @@ export const startIngestion = async () => {
                     point.floatField('entropy', data.keyboard_entropy);
                 }
 
+                // 시간 추적 데이터 저장 (메타데이터에서 추출)
+                if (meta) {
+                    if (meta.focus_time) {
+                        const focusTimeSec = parseFloat(meta.focus_time);
+                        if (focusTimeSec > 0) {
+                            point.floatField('focus_time_sec', focusTimeSec);
+                        }
+                    }
+                    if (meta.sleep_time) {
+                        const sleepTimeSec = parseFloat(meta.sleep_time);
+                        if (sleepTimeSec > 0) {
+                            point.floatField('sleep_time_sec', sleepTimeSec);
+                        }
+                    }
+                    if (meta.away_time) {
+                        const awayTimeSec = parseFloat(meta.away_time);
+                        if (awayTimeSec > 0) {
+                            point.floatField('away_time_sec', awayTimeSec);
+                        }
+                    }
+                    if (meta.distraction_time) {
+                        const distractionTimeSec = parseFloat(meta.distraction_time);
+                        if (distractionTimeSec > 0) {
+                            point.floatField('distraction_time_sec', distractionTimeSec);
+                        }
+                    }
+                }
+
                 point.timestamp(new Date(data.timestamp || Date.now()));
 
                 writeApi.writePoint(point);
