@@ -25,6 +25,7 @@ COPY . .
 RUN npm run build
 # Copy static assets (Admin Dashboard)
 COPY src/public ./dist/public
+COPY src/public ./dist/public
 COPY protos ./dist/protos
 
 # Set environment variables
@@ -39,6 +40,7 @@ ENV NODE_ENV=production
 
 # Expose ports (gRPC + Statistics API)
 EXPOSE 9090
+EXPOSE 3001
 EXPOSE 3001
 EXPOSE 8083
 
