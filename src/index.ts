@@ -4,7 +4,7 @@ import bodyParser from 'body-parser';
 import { BlacklistManager } from './core/blacklist-manager';
 import { startGrpcServer } from './services/score-service';
 import { startIngestion } from './services/ingestion-service';
-import { startExpressServer } from './services/statistics-service';
+// Statistics service removed - now using event count API from AI server
 import { connectKafka } from './config/kafka';
 import { writeApi, Point } from './config/influx';
 
@@ -150,14 +150,12 @@ const main = async () => {
         console.warn('[Main] gRPC server failed, continuing without gRPC:', err);
     }
 
-    // 5. Start Express Server (for Statistics REST API) - Critical, must not fail
-    try {
-        const statsPort = parseInt(process.env.STATS_PORT || '3001');
-        startExpressServer(statsPort);
-    } catch (err) {
-        console.error('[Main] CRITICAL: Statistics server failed to start:', err);
-        throw err; // Re-throw to ensure process exits if stats server fails
-    }
+    // 5. Statistics service removed - use event count API from AI server instead
+    // POST /api/v1/events - Record events (SMARTPHONE_DETECTED, DROWSINESS_DETECTED, etc.)
+    // GET /api/v1/events/stats - Get event statistics
+    console.log('[Main] Statistics service removed. Use AI server event API instead:');
+    console.log('   - POST http://localhost:8000/api/v1/events');
+    console.log('   - GET http://localhost:8000/api/v1/events/stats?user_id=xxx&period=today');
 };
 
 main().catch(console.error);
