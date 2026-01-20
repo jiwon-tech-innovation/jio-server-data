@@ -121,6 +121,65 @@ const main = async () => {
         console.log(`[Admin] Dashboard available at http://localhost:${port}/admin.html`);
     });
 
+    // ==========================================
+    // 🔔 SSE (Server-Sent Events) for Real-Time Blacklist Push
+    // ==========================================
+    const sseClients = new Set<express.Response>();
+
+    // SSE Endpoint - clients connect here for real-time updates
+    app.get('/api/v1/blacklist/stream', (req, res) => {
+        // SSE Headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        console.log('[SSE] Client connected');
+        sseClients.add(res);
+
+        // Send current blacklist immediately on connection
+        const initialData = JSON.stringify({
+            type: 'BLACKLIST_SYNC',
+            data: blacklistManager.getBlacklist(),
+            timestamp: Date.now()
+        });
+        res.write(`data: ${initialData}\n\n`);
+
+        // Heartbeat to keep connection alive
+        const heartbeat = setInterval(() => {
+            res.write(`: heartbeat\n\n`);
+        }, 30000);
+
+        // Cleanup on disconnect
+        req.on('close', () => {
+            console.log('[SSE] Client disconnected');
+            clearInterval(heartbeat);
+            sseClients.delete(res);
+        });
+    });
+
+    // Broadcast blacklist updates to all SSE clients
+    const broadcastBlacklistUpdate = () => {
+        const payload = JSON.stringify({
+            type: 'BLACKLIST_UPDATE',
+            data: blacklistManager.getBlacklist(),
+            timestamp: Date.now()  // For latency measurement
+        });
+
+        sseClients.forEach((client) => {
+            client.write(`data: ${payload}\n\n`);
+        });
+
+        console.log(`[SSE] Broadcasted blacklist update to ${sseClients.size} clients`);
+    };
+
+    // Subscribe to BlacklistManager 'change' event
+    blacklistManager.on('change', () => {
+        broadcastBlacklistUpdate();
+    });
+
+    console.log(`[SSE] Stream endpoint available at http://localhost:${port}/api/v1/blacklist/stream`);
+
     // 2. Connect Kafka
     await connectKafka();
 
