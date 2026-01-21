@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jiaa-data-service
+  namespace: jiaa
+  labels:
+    app: jiaa-data-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jiaa-data-service
+  template:
+    metadata:
+      labels:
+        app: jiaa-data-service
+    spec:
+      containers:
+      - name: data-service
+        image: <YOUR_ECR_REPO_URL>:latest # ⚠️ Replace with your ECR Image URL
+        ports:
+        - containerPort: 8083
+          name: http-admin
+        - containerPort: 9090
+          name: grpc-core
+        - containerPort: 3001
+          name: http-stats
+        env:
+        # Kafka Configuration (Adjust for EKS MSK or Strimzi)
+        - name: KAFKA_BROKER
+          value: "kafka-service:29092"
+        - name: REDIS_HOST
+          value: "<PASTE_YOUR_REDIS_ENDPOINT_HERE>" # e.g. jiaa-redis.xxxx.ng.0001.apn2.cache.amazonaws.com
+        - name: REDIS_PORT
+          value: "6379"
+        - name: INFLUX_URL
+          value: "http://influxdb-service:8086"
+        - name: GRPC_PORT
+          value: "0.0.0.0:9090"
+        - name: STATS_PORT
+          value: "3001"
+        - name: PORT
+          value: "8083"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/blacklist
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/blacklist
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 5

@@ -1,26 +1,32 @@
 import path from 'path';
 import express from 'express';
+import cors from 'cors';
 import bodyParser from 'body-parser';
 import { BlacklistManager } from './core/blacklist-manager';
 import { startGrpcServer } from './services/score-service';
 import { startIngestion } from './services/ingestion-service';
 // Statistics service removed - now using event count API from AI server
 import { connectKafka } from './config/kafka';
-import { writeApi, Point } from './config/influx';
 
 const main = async () => {
     console.log('Starting Data Service (Node.js)...');
 
     // 0. Initialize Blacklist Manager
-    const blacklistManager = new BlacklistManager();
+    const blacklistManager = BlacklistManager.getInstance();
 
     // 1. HTTP Server (Express)
     const app = express();
-    const port = 8082; // Data Service HTTP Port
+    const port = 8083; // Data Service HTTP Port (8082 is taken by Auth Service)
 
+    app.use(cors());
     app.use(bodyParser.json());
     // Serve "src/public" as static files (access via /admin.html)
     app.use(express.static(path.join(__dirname, 'public')));
+
+    // Root Redirect -> admin.html
+    app.get('/', (req, res) => {
+        res.redirect('/admin.html');
+    });
 
     // Health Check for ALB
     app.get('/health', (req, res) => res.status(200).send('OK'));
@@ -67,6 +73,27 @@ const main = async () => {
         res.json({ success });
     });
 
+    // API: Delete Item (Admin) [NEW]
+    app.delete('/api/v1/blacklist/remove', (req, res) => {
+        const { appName } = req.body;
+        const success = blacklistManager.deleteApp(appName);
+        res.json({ success });
+    });
+
+    // API: Add Blacklist (Admin - Manual)
+    app.post('/api/v1/blacklist/add', (req, res) => {
+        const { appName } = req.body;
+        if (!appName) {
+            res.status(400).json({ success: false, message: "Missing appName" });
+            return;
+        }
+        // 1. Report as game (force creation)
+        blacklistManager.reportApp(appName, true);
+        // 2. Immediately approve
+        const success = blacklistManager.reviewApp(appName, 'APPROVED');
+        res.json({ success });
+    });
+
     // API: Add Whitelist (Admin)
     app.post('/api/v1/whitelist/add', (req, res) => {
         const { appName } = req.body;
@@ -81,47 +108,20 @@ const main = async () => {
         res.json({ success });
     });
 
-    // API: Generic Log Ingestion (Data Trinity)
-    // Writes to InfluxDB 'user_activity' measurement
-    app.post('/api/v1/log', async (req, res) => {
-        try {
-            const { user_id, category, type, data, timestamp } = req.body;
+    // --- Monitor API (In-Memory) ---
+    let latestClientApps: string[] = [];
 
-            if (!user_id || !category || !data) {
-                res.status(400).json({ success: false, message: "Missing required fields" });
-                return;
-            }
-
-            console.log(`[Log] Received ${category}/${type} log for ${user_id}`);
-
-            const point = new Point('user_activity')
-                .tag('user_id', user_id)
-                .tag('category', category)
-                .tag('type', type || 'general')
-                .timestamp(new Date(timestamp || Date.now()));
-
-            // Handle Data Fields
-            if (data.score !== undefined) point.floatField('score', parseFloat(data.score));
-            if (data.wrong_count !== undefined) point.intField('wrong_count', parseInt(data.wrong_count));
-            if (data.action_detail) point.stringField('action_detail', data.action_detail);
-
-            // Allow generic fields
-            if (data.duration_min !== undefined) point.floatField('duration_min', parseFloat(data.duration_min));
-
-            // Store complex objects as JSON string (e.g., wrong_answers)
-            if (data.wrong_answers) {
-                point.stringField('wrong_answers', JSON.stringify(data.wrong_answers));
-            }
-
-            writeApi.writePoint(point);
-            await writeApi.flush(); // Ensure immediate write for tests
-
-            res.json({ success: true, message: "Log saved to InfluxDB" });
-
-        } catch (e: any) {
-            console.error("[API] Log Ingestion Error:", e);
-            res.status(500).json({ success: false, message: e.message });
+    app.post('/api/v1/monitor/apps', (req, res) => {
+        const { apps } = req.body;
+        if (Array.isArray(apps)) {
+            // Filter out empty strings or duplicates if needed
+            latestClientApps = apps;
         }
+        res.json({ success: true });
+    });
+
+    app.get('/api/v1/monitor/apps', (req, res) => {
+        res.json({ success: true, data: latestClientApps });
     });
 
     app.listen(port, () => {
@@ -129,19 +129,70 @@ const main = async () => {
         console.log(`[Admin] Dashboard available at http://localhost:${port}/admin.html`);
     });
 
-    // 2. Connect Kafka (non-blocking - continue even if Kafka fails)
-    try {
-        await connectKafka();
-    } catch (err) {
-        console.warn('[Main] Kafka connection failed, continuing without Kafka:', err);
-    }
+    // ==========================================
+    // 🔔 SSE (Server-Sent Events) for Real-Time Blacklist Push
+    // ==========================================
+    const sseClients = new Set<express.Response>();
 
-    // 3. Start Ingestion Loop (non-blocking - continue even if ingestion fails)
-    try {
-        await startIngestion();
-    } catch (err) {
-        console.warn('[Main] Ingestion service failed, continuing without ingestion:', err);
-    }
+    // SSE Endpoint - clients connect here for real-time updates
+    app.get('/api/v1/blacklist/stream', (req, res) => {
+        // SSE Headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        console.log('[SSE] Client connected');
+        sseClients.add(res);
+
+        // Send current blacklist immediately on connection
+        const initialData = JSON.stringify({
+            type: 'BLACKLIST_SYNC',
+            data: blacklistManager.getBlacklist(),
+            timestamp: Date.now()
+        });
+        res.write(`data: ${initialData}\n\n`);
+
+        // Heartbeat to keep connection alive
+        const heartbeat = setInterval(() => {
+            res.write(`: heartbeat\n\n`);
+        }, 30000);
+
+        // Cleanup on disconnect
+        req.on('close', () => {
+            console.log('[SSE] Client disconnected');
+            clearInterval(heartbeat);
+            sseClients.delete(res);
+        });
+    });
+
+    // Broadcast blacklist updates to all SSE clients
+    const broadcastBlacklistUpdate = () => {
+        const payload = JSON.stringify({
+            type: 'BLACKLIST_UPDATE',
+            data: blacklistManager.getBlacklist(),
+            timestamp: Date.now()  // For latency measurement
+        });
+
+        sseClients.forEach((client) => {
+            client.write(`data: ${payload}\n\n`);
+        });
+
+        console.log(`[SSE] Broadcasted blacklist update to ${sseClients.size} clients`);
+    };
+
+    // Subscribe to BlacklistManager 'change' event
+    blacklistManager.on('change', () => {
+        broadcastBlacklistUpdate();
+    });
+
+    console.log(`[SSE] Stream endpoint available at http://localhost:${port}/api/v1/blacklist/stream`);
+
+    // 2. Connect Kafka
+    await connectKafka();
+
+    // 3. Start Ingestion Loop
+    await startIngestion();
 
     // 4. Start gRPC Server (for score streaming)
     try {

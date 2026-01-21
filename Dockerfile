@@ -25,6 +25,8 @@ COPY . .
 RUN npm run build
 # Copy static assets (Admin Dashboard)
 COPY src/public ./dist/public
+COPY src/public ./dist/public
+COPY protos ./dist/protos
 
 # Set environment variables
 # NODE_ENV: production optimize
@@ -39,6 +41,8 @@ ENV NODE_ENV=production
 # Expose ports (gRPC + Statistics API)
 EXPOSE 9090
 EXPOSE 3001
+EXPOSE 3001
+EXPOSE 8083
 
 # Command to run the application
 CMD ["npm", "start"]

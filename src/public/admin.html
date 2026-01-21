@@ -72,11 +72,34 @@
     <h1>🛡️ JIAA Admin Dashboard</h1>
     <div id="stats">Loading...</div>
 
-    <h2>🚨 Blacklist Review (Pending Games)</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>🚨 Blacklist Review</h2>
+        <button id="btn-sort" onclick="toggleSort()" style="background:#555; color:white;">Sort by Date 📅</button>
+    </div>
+
+    <!-- Live Process Monitor -->
+    <h3>📱 Live Client Processes (Auto-refresh)</h3>
+    <div
+        style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 20px; max-height: 150px; overflow-y: auto;">
+        <ul id="live-apps-list"
+            style="list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 10px;">
+            <li>Loading...</li>
+        </ul>
+    </div>
+
+    </div>
+
+    <!-- Manual Blacklist Add -->
+    <h3>🚫 Blacklist Management (Manual Add)</h3>
+    <div style="margin: 10px 0;">
+        <input type="text" id="blacklist-input" placeholder="Enter app name (e.g. League of Legends)" />
+        <button class="btn-approve" style="background-color:#d32f2f;" onclick="addToBlacklist()">Block App</button>
+    </div>
+
     <table>
         <thead>
             <tr>
-                <th>App Name</th>
+                <th>App Name / Last Seen</th>
                 <th>Status</th>
                 <th>Reports</th>
                 <th>Actions</th>
@@ -102,11 +125,65 @@
     </table>
 
     <script>
-        const API_URL = 'http://localhost:8082/api/v1';
+        const API_URL = '/api/v1';
+
+        // 'status' or 'date'
+        let currentSortMode = 'status';
 
         async function init() {
             await fetchBlacklist();
             await fetchWhitelist();
+
+            // Start polling for live apps
+            setInterval(fetchLiveApps, 5000);
+            fetchLiveApps();
+        }
+
+        function toggleSort() {
+            if (currentSortMode === 'status') {
+                currentSortMode = 'date';
+                document.getElementById('btn-sort').innerText = "Sort by Status 🔄";
+            } else {
+                currentSortMode = 'status';
+                document.getElementById('btn-sort').innerText = "Sort by Date 📅";
+            }
+            fetchBlacklist(); // Re-fetch and render
+        }
+
+        async function fetchLiveApps() {
+            try {
+                const response = await fetch(`${API_URL}/monitor/apps`);
+                const json = await response.json();
+                if (json.success && Array.isArray(json.data)) {
+                    renderLiveApps(json.data);
+                }
+            } catch (e) {
+                console.error("Failed to fetch live apps", e);
+            }
+        }
+
+        function renderLiveApps(apps) {
+            const container = document.getElementById('live-apps-list');
+            if (!container) return; // Guard clause
+
+            if (apps.length === 0) {
+                container.innerHTML = '<li><i>No apps detected yet...</i></li>';
+                return;
+            }
+
+            container.innerHTML = apps.map(app => `
+                <li>
+                    <span>${app}</span>
+                    <button class="btn-reject" onclick="addFromMonitor('${app}')" style="padding: 2px 8px; font-size: 12px;">+ Add</button>
+                </li>
+            `).join('');
+        }
+
+        async function addFromMonitor(appName) {
+            const input = document.getElementById('blacklist-input');
+            input.value = appName;
+            // Optional: Auto-click? Let's just fill for safety
+            // await addToBlacklist(); 
         }
 
         async function fetchBlacklist() {
@@ -125,11 +202,18 @@
             const tbody = document.getElementById('list-body');
             tbody.innerHTML = '';
 
-            items.sort((a, b) => {
-                if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
-                if (a.status !== 'PENDING' && b.status === 'PENDING') return 1;
-                return b.reportCount - a.reportCount;
-            });
+            // Sorting Logic
+            if (currentSortMode === 'date') {
+                // Sort by lastReportedAt (Newest first)
+                items.sort((a, b) => b.lastReportedAt - a.lastReportedAt);
+            } else {
+                // Default: Pending first, then Report Count
+                items.sort((a, b) => {
+                    if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
+                    if (a.status !== 'PENDING' && b.status === 'PENDING') return 1;
+                    return b.reportCount - a.reportCount;
+                });
+            }
 
             const pendingCount = items.filter(i => i.status === 'PENDING').length;
             document.getElementById('stats').innerText = `Pending Reviews: ${pendingCount} | Total Tracked: ${items.length}`;
@@ -138,17 +222,22 @@
                 // Hide Whitelisted items from this list to reduce clutter
                 if (item.status === 'WHITELISTED') return;
 
+                const dateStr = new Date(item.lastReportedAt).toLocaleString();
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${item.appName}</td>
+                    <td>
+                        <div style="font-weight:bold;">${item.appName}</div>
+                        <div style="font-size:0.8em; color:#666;">Last Seen: ${dateStr}</div>
+                    </td>
                     <td class="${item.status}">${item.status}</td>
                     <td>${item.reportCount}</td>
                     <td>
                         ${item.status === 'PENDING' ? `
                             <button class="btn-approve" onclick="review('${item.appName}', 'APPROVED')">Block</button>
-                            <button class="btn-reject" onclick="review('${item.appName}', 'REJECTED')">Ignore</button>
+                            <button class="btn-reject" style="background-color:#999;" onclick="review('${item.appName}', 'REJECTED')">Ignore</button>
                             <button class="btn-approve" style="background-color:#2196F3" onclick="review('${item.appName}', 'WHITELISTED')">Whitelist</button>
-                        ` : item.status}
+                        ` : ''}
+                        <button class="btn-reject" onclick="deleteItem('${item.appName}')">❌ Delete</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -165,7 +254,7 @@
                     <td>${item.appName}</td>
                     <td class="APPROVED" style="color:#2196F3">SAFE</td>
                     <td>
-                        <button class="btn-reject" onclick="review('${item.appName}', 'REJECTED')">Remove</button>
+                        <button class="btn-reject" onclick="deleteItem('${item.appName}')">❌ Remove</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -183,12 +272,37 @@
             init();
         }
 
+        async function deleteItem(appName) {
+            if (!confirm(`⚠️ Are you sure you want to PERMANENTLY DELETE '${appName}'?`)) return;
+
+            await fetch(`${API_URL}/blacklist/remove`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appName })
+            });
+            init();
+        }
+
         async function addToWhitelist() {
             const input = document.getElementById('whitelist-input');
             const appName = input.value.trim();
             if (!appName) return;
 
             await fetch(`${API_URL}/whitelist/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appName })
+            });
+            input.value = '';
+            init();
+        }
+
+        async function addToBlacklist() {
+            const input = document.getElementById('blacklist-input');
+            const appName = input.value.trim();
+            if (!appName) return;
+
+            await fetch(`${API_URL}/blacklist/add`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ appName })

@@ -3,12 +3,71 @@ import { ScoringEngine, SystemLogRequest } from '../core/scoring-engine';
 import { StateDecisionMaker, UserState } from '../core/state-decision';
 import { eventBus, EVENTS } from '../core/event-bus';
 import { writeApi, Point } from '../config/influx';
+import { BlacklistManager } from '../core/blacklist-manager';
 
 const TOPIC = process.env.ACTIVITY_TOPIC || 'client-activity';
 const STATE_TOPIC = 'command-state'; // Dev 4가 수신하는 토픽
 
 // 이전 상태 추적 (상태 변경 시에만 전송)
 let previousState: UserState | null = null;
+
+
+// [Wall 3] AI Verification Helper
+import * as grpc from '@grpc/grpc-js';
+import * as protoLoader from '@grpc/proto-loader';
+import path from 'path';
+
+// gRPC Setup
+const PROTO_PATH = path.join(__dirname, '../protos/intelligence.proto');
+const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+    keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
+});
+const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;
+const intelligenceService = protoDescriptor.jiaa.intelligence.IntelligenceService;
+
+// Connect to AI Infrastructure
+const AI_GRPC_URL = process.env.AI_GRPC_URL || 'api.jiobserver.cloud:443';
+const client = new intelligenceService(AI_GRPC_URL, grpc.credentials.createSsl());
+
+// [Wall 3] AI Verification Helper via gRPC
+async function classifyContent(windowTitle: string): Promise<{ state: string, reason: string }> {
+    return new Promise((resolve) => {
+        const request = {
+            url: '',
+            window_title: windowTitle
+        };
+
+        console.log(`[Wall 3] gRPC Calling AnalyzeUrl to ${AI_GRPC_URL}...`);
+
+        client.AnalyzeUrl(request, (err: any, response: any) => {
+            if (err) {
+                console.error(`[AI] gRPC Error: ${err.message}`);
+                // Fail-safe: Assume PLAY if AI is unreachable/error
+                resolve({ state: 'PLAY', reason: 'gRPC_ERROR' });
+                return;
+            }
+
+            // Map Enum String (STUDY, PLAY, ETC) to UserState string logic
+            // Proto Enum: URL_UNKNOWN=0, STUDY=1, PLAY=2, NEUTRAL=3, WORK=4
+            // Response typically returns string "STUDY" or "PLAY" if enums=String in loader
+
+            let state = 'PLAY';
+            // Proto Enum: UNKNOWN=0, STUDY=1, PLAY=2, WORK=3
+            if (response.category === 'STUDY' || response.category === 'WORK') {
+                state = 'STUDY'; // Treat work as STUDY/SAFE
+            }
+
+            resolve({
+                state: state,
+                reason: response.reason || 'AI Judgment'
+            });
+        });
+    });
+}
 
 export const startIngestion = async () => {
     console.log(`[Ingestion] Subscribing to topic: ${TOPIC}`);
@@ -46,11 +105,6 @@ export const startIngestion = async () => {
                     if (meta.window_title) data.window_title = meta.window_title;
                     if (meta.is_dragging) data.is_dragging = (meta.is_dragging === 'true');
                     if (meta.avg_dwell_time) data.avg_dwell_time = parseFloat(meta.avg_dwell_time);
-
-                    // [FIX] Telemetry Pipeline
-                    if (meta.is_os_idle) data.is_os_idle = (meta.is_os_idle === 'true');
-                    if (meta.is_eyes_closed) data.is_eyes_closed = (meta.is_eyes_closed === 'true');
-                    if (meta.concentration_score) data.vision_score = parseFloat(meta.concentration_score);
                 }
 
                 // If explicit fields exist (legacy/fallback)
@@ -61,12 +115,39 @@ export const startIngestion = async () => {
 
                 // 1. Calculate
                 const score = ScoringEngine.calculateScore(data);
-                const state = await StateDecisionMaker.determineState(score, data);
+                let state = await StateDecisionMaker.determineState(score, data);
 
-                const stateStr = UserState[state];
+                // [Wall 3] AI Verification Loop
                 if (state === UserState.GAMING) {
-                    console.log(`\x1b[31m[Ingestion] 🚨 GAMING DETECTED! Score: ${score}, State: ${stateStr}\x1b[0m`);
+                    let aiConfirmed = true;
+
+                    // Only verify if we have a title (otherwise we rely on heuristic)
+                    if (data.window_title && data.window_title !== "Unknown") {
+                        console.log(`[Wall 3] Heuristic says GAMING. Verifying with AI for title: '${data.window_title}'...`);
+                        const aiResult = await classifyContent(data.window_title);
+                        console.log(`[Wall 3] AI Result: ${aiResult.state} (${aiResult.reason})`);
+
+                        if (aiResult.state === 'STUDY') {
+                            console.log(`\x1b[32m[Wall 3] 🛡️ AI OVERRIDE: Gaming -> Normal (Context: ${aiResult.reason})\x1b[0m`);
+                            state = UserState.NORMAL; // Override state
+                            aiConfirmed = false;
+                        } else {
+                            console.log(`[Wall 3] AI Confirmed Gaming.`);
+                        }
+                    }
+
+                    if (aiConfirmed) {
+                        const stateStr = UserState[state];
+                        console.log(`\x1b[31m[Ingestion] 🚨 CONFIRMED GAMING! Score: ${score}, State: ${stateStr}\x1b[0m`);
+
+                        // [Feedback Loop] Auto-Report to Blacklist
+                        if (data.window_title && data.window_title !== "Unknown") {
+                            console.log(`[Feedback] Auto-reporting '${data.window_title}' to Blacklist...`);
+                            BlacklistManager.getInstance().reportApp(data.window_title, true);
+                        }
+                    }
                 } else {
+                    const stateStr = UserState[state];
                     console.log(`[Ingestion] Score: ${score}, State: ${stateStr}`);
                 }
 

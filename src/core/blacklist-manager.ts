@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { EventEmitter } from 'events';
 
 export interface BlacklistItem {
     appName: string;
@@ -9,15 +10,24 @@ export interface BlacklistItem {
     lastReportedAt: number;
 }
 
-export class BlacklistManager {
+export class BlacklistManager extends EventEmitter {
+    private static instance: BlacklistManager;
     private filePath: string;
     private blacklist: Map<string, BlacklistItem>;
 
-    constructor() {
+    private constructor() {
+        super();
         // Data stored in 'jiaa-server-data/data/blacklist.json'
         this.filePath = path.join(process.cwd(), 'data', 'blacklist.json');
         this.blacklist = new Map();
         this.load();
+    }
+
+    public static getInstance(): BlacklistManager {
+        if (!BlacklistManager.instance) {
+            BlacklistManager.instance = new BlacklistManager();
+        }
+        return BlacklistManager.instance;
     }
 
     private load() {
@@ -44,6 +54,13 @@ export class BlacklistManager {
         } catch (error) {
             console.error("[Blacklist] Failed to save:", error);
         }
+    }
+
+    /**
+     * Emit 'change' event to notify WebSocket clients
+     */
+    private notifyChange() {
+        this.emit('change', this.getBlacklist());
     }
 
     public getAllItems(): BlacklistItem[] {
@@ -84,6 +101,7 @@ export class BlacklistManager {
         }
 
         this.save();
+        this.notifyChange(); // 🔔 Notify WebSocket clients
         return item;
     }
 
@@ -92,6 +110,18 @@ export class BlacklistManager {
         if (item) {
             item.status = status;
             this.save();
+            this.notifyChange(); // 🔔 Notify WebSocket clients
+            return true;
+        }
+        return false;
+    }
+
+    public deleteApp(appName: string): boolean {
+        if (this.blacklist.has(appName)) {
+            this.blacklist.delete(appName);
+            this.save();
+            this.notifyChange(); // 🔔 Notify WebSocket clients
+            console.log(`[Blacklist] Deleted '${appName}'`);
             return true;
         }
         return false;
